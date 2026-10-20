@@ -1,0 +1,393 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Plany WIG</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='3' y='5' width='26' height='24' rx='4' fill='%232f6fdb'/%3E%3Crect x='3' y='5' width='26' height='7' rx='3' fill='%231d4fa8'/%3E%3Crect x='8' y='16' width='6' height='4' rx='1' fill='%23fff'/%3E%3Crect x='18' y='16' width='6' height='4' rx='1' fill='%23fff'/%3E%3Crect x='8' y='22' width='6' height='4' rx='1' fill='%23fff'/%3E%3C/svg%3E">
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --text: #1d2330; --muted: #5f6b7a; --line: #e2e6ec;
+    --accent: #2f6fdb; --accent-soft: #e8f0fd; --today: #fff8e1; --today-line: #f0c040;
+    --warn-bg: #fff4e5; --warn-text: #8a4b00; --shadow: 0 1px 2px rgba(16,24,40,.06);
+    --k-w: #2f6fdb; --k-c: #1f9d6b; --k-l: #c2410c; --k-p: #8b5cf6; --k-s: #0e7490; --k-x: #64748b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0f1419; --panel: #171d25; --text: #e6e9ee; --muted: #97a2b1; --line: #2a323d;
+      --accent: #6d9eff; --accent-soft: #1c2a42; --today: #2a2516; --today-line: #b08a1e;
+      --warn-bg: #33240f; --warn-text: #f0b866; --shadow: none;
+      --k-w: #6d9eff; --k-c: #3ccf95; --k-l: #fb8a4c; --k-p: #b49bff; --k-s: #38c2dc; --k-x: #94a3b8;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0f1419; --panel: #171d25; --text: #e6e9ee; --muted: #97a2b1; --line: #2a323d;
+    --accent: #6d9eff; --accent-soft: #1c2a42; --today: #2a2516; --today-line: #b08a1e;
+    --warn-bg: #33240f; --warn-text: #f0b866; --shadow: none;
+    --k-w: #6d9eff; --k-c: #3ccf95; --k-l: #fb8a4c; --k-p: #b49bff; --k-s: #38c2dc; --k-x: #94a3b8;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width: 1200px; margin: 0 auto; padding: 20px 16px 48px; }
+  header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px; margin-bottom: 16px; }
+  h1 { font-size: 22px; margin: 0; letter-spacing: -.01em; }
+  .muted { color: var(--muted); }
+  .small { font-size: 13px; }
+  .controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 12px; }
+  .seg { display: inline-flex; background: var(--panel); border: 1px solid var(--line);
+         border-radius: 10px; padding: 3px; box-shadow: var(--shadow); }
+  .seg button { border: 0; background: transparent; color: var(--muted); font: inherit;
+                padding: 6px 14px; border-radius: 7px; cursor: pointer; }
+  .seg button[aria-pressed="true"] { background: var(--accent); color: #fff; }
+  .combo { position: relative; flex: 1 1 320px; max-width: 520px; }
+  .combo input { width: 100%; font: inherit; padding: 9px 12px; border-radius: 10px;
+                 border: 1px solid var(--line); background: var(--panel); color: var(--text);
+                 box-shadow: var(--shadow); }
+  .combo input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  .combo ul { position: absolute; z-index: 10; left: 0; right: 0; top: calc(100% + 4px);
+              margin: 0; padding: 4px; list-style: none; max-height: 320px; overflow-y: auto;
+              background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+              box-shadow: 0 8px 24px rgba(16,24,40,.14); }
+  .combo li { padding: 7px 10px; border-radius: 6px; cursor: pointer; display: flex;
+              justify-content: space-between; gap: 12px; }
+  .combo li .n { color: var(--muted); font-size: 12px; white-space: nowrap; }
+  .combo li[aria-selected="true"] { background: var(--accent-soft); }
+  .combo li.empty { color: var(--muted); cursor: default; }
+  .weeknav { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 14px 0 12px; }
+  .weeknav h2 { font-size: 17px; margin: 0 8px 0 0; }
+  .btn { font: inherit; font-size: 14px; padding: 6px 12px; border-radius: 8px; cursor: pointer;
+         border: 1px solid var(--line); background: var(--panel); color: var(--text); box-shadow: var(--shadow); }
+  .btn:hover { border-color: var(--accent); }
+  .btn:disabled { opacity: .45; cursor: default; border-color: var(--line); }
+  .spacer { flex: 1; }
+  .week { display: grid; gap: 10px; grid-template-columns: repeat(var(--days, 5), minmax(0, 1fr)); }
+  .day { background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+         padding: 10px; min-height: 120px; box-shadow: var(--shadow); min-width: 0; }
+  .day.today { background: var(--today); border-color: var(--today-line); }
+  .day h3 { font-size: 13px; margin: 0 0 8px; color: var(--muted); font-weight: 600;
+            text-transform: uppercase; letter-spacing: .04em; display: flex; justify-content: space-between; }
+  .day.today h3 { color: var(--text); }
+  .none { color: var(--muted); font-size: 13px; }
+  .lesson { border-left: 4px solid var(--kc, var(--k-x)); background: var(--bg); border-radius: 8px;
+            padding: 7px 9px; margin-bottom: 8px; overflow-wrap: anywhere; }
+  .lesson:last-child { margin-bottom: 0; }
+  .lesson .time { font-variant-numeric: tabular-nums; font-weight: 600; font-size: 13px; }
+  .lesson .course { font-weight: 600; margin: 1px 0; }
+  .lesson .meta { color: var(--muted); font-size: 13px; }
+  .lesson .meta a { color: inherit; text-decoration: underline dotted; text-underline-offset: 2px; }
+  .lesson .meta a:hover { color: var(--accent); }
+  .lesson.now { outline: 2px solid var(--kc); }
+  .badge { display: inline-block; font-size: 11px; font-weight: 700; padding: 0 6px; border-radius: 99px;
+           color: #fff; background: var(--kc, var(--k-x)); vertical-align: 1px; margin-left: 4px; }
+  .k-w { --kc: var(--k-w); } .k-c { --kc: var(--k-c); } .k-l { --kc: var(--k-l); }
+  .k-p { --kc: var(--k-p); } .k-s { --kc: var(--k-s); } .k-x { --kc: var(--k-x); }
+  .list .date { font-weight: 600; margin: 16px 0 6px; }
+  .list .date:first-child { margin-top: 0; }
+  .list .lesson { background: var(--panel); border: 1px solid var(--line); border-left-width: 4px;
+                  border-left-color: var(--kc, var(--k-x)); display: grid; grid-template-columns: 96px 1fr; gap: 2px 12px; }
+  .list .lesson .time { grid-row: span 2; }
+  .notice { background: var(--warn-bg); color: var(--warn-text); border-radius: 10px;
+            padding: 10px 12px; margin: 10px 0; font-size: 14px; }
+  .empty-state { text-align: center; padding: 48px 16px; color: var(--muted); background: var(--panel);
+                 border: 1px dashed var(--line); border-radius: 12px; }
+  .stats { margin-top: 28px; }
+  .theme { margin-left: auto; }
+  @media (max-width: 820px) {
+    .week { grid-template-columns: 1fr; }
+    .day { min-height: 0; }
+    .day.blank { padding: 8px 10px; }
+    .day.blank h3 { margin: 0; }
+    .list .lesson { grid-template-columns: 1fr; }
+    .list .lesson .time { grid-row: auto; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Plany prowadzących i sal WIG</h1>
+    <span class="muted small" id="updated">Wczytywanie…</span>
+    <button class="btn theme small" id="theme" type="button" title="Przełącz jasny / ciemny motyw">Motyw</button>
+  </header>
+
+  <div class="controls">
+    <div class="seg" role="group" aria-label="Rodzaj planu">
+      <button type="button" data-mode="t" aria-pressed="true">Prowadzący</button>
+      <button type="button" data-mode="r" aria-pressed="false">Sale</button>
+    </div>
+    <div class="combo">
+      <input id="search" type="search" autocomplete="off" spellcheck="false"
+             role="combobox" aria-expanded="false" aria-controls="options"
+             placeholder="Wpisz nazwisko prowadzącego…">
+      <ul id="options" role="listbox" hidden></ul>
+    </div>
+  </div>
+
+  <div id="notices"></div>
+  <main id="main"></main>
+  <p class="muted small stats" id="stats"></p>
+</div>
+
+<script>
+"use strict";
+const DAYS = ["poniedziałek", "wtorek", "środa", "czwartek", "piątek", "sobota", "niedziela"];
+const MONTHS = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"];
+const TITLE_WORDS = new Set(["dr", "mgr", "prof", "hab", "inż", "płk", "ppłk", "mjr", "kpt",
+  "por", "ppor", "gen", "bryg", "kmdr", "lic", "doc", "arch", "n", "med", "wat"]);
+
+const state = { mode: "t", key: null, week: null, view: "week" };
+let D = null;          // data.json
+let lessons = [];      // rozpakowane zajęcia
+const byTeacher = new Map(), byRoom = new Map();
+
+const $ = (id) => document.getElementById(id);
+const el = (tag, attrs = {}, ...kids) => {
+  const n = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === "class") n.className = v; else if (k === "text") n.textContent = v;
+    else if (k.startsWith("on")) n.addEventListener(k.slice(2), v); else n.setAttribute(k, v);
+  }
+  for (const k of kids) if (k != null) n.append(k);
+  return n;
+};
+
+// --- daty (lokalne, bez stref: data.json ma daty i godziny czasu polskiego) ---
+const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const parseIso = (s) => { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d); };
+const addDays = (d, n) => { const r = new Date(d); r.setDate(r.getDate() + n); return r; };
+const mondayOf = (d) => addDays(d, -((d.getDay() + 6) % 7));
+const fmtDay = (d) => `${d.getDate()} ${MONTHS[d.getMonth()]}`;
+const today = () => { const n = new Date(); return new Date(n.getFullYear(), n.getMonth(), n.getDate()); };
+
+// --- wyszukiwanie bez polskich znaków i wielkości liter ---
+const fold = (s) => s.toLocaleLowerCase("pl").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/ł/g, "l");
+function teacherSortKey(name) {
+  const words = name.split(/\s+/);
+  while (words.length > 1 && (TITLE_WORDS.has(fold(words[0]).replace(/[.,]/g, "")) || /\.$/.test(words[0]))) words.shift();
+  return words.join(" ");
+}
+const collator = new Intl.Collator("pl", { numeric: true, sensitivity: "base" });
+
+function kindClass(kind) {
+  const k = fold(kind);
+  if (k === "w") return "k-w";
+  if (k === "c") return "k-c";
+  if (k === "l") return "k-l";
+  if (k === "p") return "k-p";
+  if (k === "s") return "k-s";
+  return "k-x";
+}
+
+// --- dane ---
+async function load() {
+  try {
+    const res = await fetch("data.json", { cache: "no-cache" });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    D = await res.json();
+  } catch (e) {
+    $("updated").textContent = "";
+    $("main").replaceChildren(el("div", { class: "empty-state", text: `Nie udało się wczytać planów (${e.message}).` }));
+    return;
+  }
+  lessons = D.lessons.map(([day, start, end, c, kind, seq, t, r, g]) => ({
+    day, start, end, course: D.courses[c], kind, seq,
+    teacher: D.teachers[t], room: D.rooms[r], groups: g.map((i) => D.groups[i]),
+  }));
+  for (const l of lessons) {
+    if (l.teacher) (byTeacher.get(l.teacher) || byTeacher.set(l.teacher, []).get(l.teacher)).push(l);
+    if (l.room) (byRoom.get(l.room) || byRoom.set(l.room, []).get(l.room)).push(l);
+  }
+  const gen = new Date(D.generated);
+  $("updated").textContent = `Dane z e-Dziekanatu: ${gen.toLocaleString("pl-PL", { dateStyle: "medium", timeStyle: "short" })}`;
+  $("stats").textContent = `${byTeacher.size} prowadzących · ${byRoom.size} sal · ${D.groups.length} grup · ${lessons.length} zajęć w semestrze`;
+  const notes = [];
+  if (D.failed.length) notes.push(`Nie udało się pobrać planów grup: ${D.failed.join(", ")} — ich zajęć może brakować.`);
+  if (Date.now() - gen.getTime() > 3 * 864e5) notes.push("Dane nie były aktualizowane od ponad 3 dni — plan może być nieaktualny.");
+  $("notices").replaceChildren(...notes.map((t) => el("div", { class: "notice", text: t })));
+  readHash();
+  render();
+}
+
+function entries() {
+  const map = state.mode === "t" ? byTeacher : byRoom;
+  const list = [...map.keys()].map((name) => ({ name, n: map.get(name).length,
+    sort: state.mode === "t" ? teacherSortKey(name) : name, f: fold(name) }));
+  return list.sort((a, b) => collator.compare(a.sort, b.sort));
+}
+
+// --- adres strony: #t=<prowadzący> albo #r=<sala>, &w=<poniedziałek>, &v=list ---
+function readHash() {
+  const p = new URLSearchParams(location.hash.slice(1));
+  state.mode = p.has("r") ? "r" : "t";
+  state.key = p.get(state.mode) || null;
+  const map = state.mode === "t" ? byTeacher : byRoom;
+  if (state.key && !map.has(state.key)) state.key = null;
+  state.view = p.get("v") === "list" ? "list" : "week";
+  state.week = p.get("w") && /^\d{4}-\d{2}-\d{2}$/.test(p.get("w")) ? mondayOf(parseIso(p.get("w"))) : null;
+}
+function writeHash() {
+  const p = new URLSearchParams();
+  if (state.key) p.set(state.mode, state.key); else if (state.mode === "r") p.set("r", "");
+  if (state.key && state.view === "list") p.set("v", "list");
+  if (state.key && state.view === "week" && state.week && iso(state.week) !== iso(mondayOf(today()))) p.set("w", iso(state.week));
+  const h = p.toString();
+  history.replaceState(null, "", h ? `#${h}` : location.pathname + location.search);
+}
+window.addEventListener("hashchange", () => { readHash(); render(); });
+
+// --- wybór prowadzącego / sali ---
+const search = $("search"), options = $("options");
+let shown = [], active = -1;
+
+function openOptions() {
+  const q = fold(search.value.trim());
+  const words = q.split(/\s+/).filter(Boolean);
+  shown = entries().filter((e) => words.every((w) => e.f.includes(w)));
+  active = shown.length ? 0 : -1;
+  options.replaceChildren(...(shown.length ? shown.slice(0, 200).map((e, i) =>
+    el("li", { role: "option", "aria-selected": String(i === active), onmousedown: (ev) => { ev.preventDefault(); choose(e.name); } },
+      el("span", { text: e.name }), el("span", { class: "n", text: `${e.n} zaj.` })))
+    : [el("li", { class: "empty", text: "Brak wyników" })]));
+  options.hidden = false;
+  search.setAttribute("aria-expanded", "true");
+}
+function closeOptions() { options.hidden = true; search.setAttribute("aria-expanded", "false"); }
+function moveActive(delta) {
+  if (!shown.length) return;
+  active = (active + delta + Math.min(shown.length, 200)) % Math.min(shown.length, 200);
+  [...options.children].forEach((li, i) => li.setAttribute("aria-selected", String(i === active)));
+  options.children[active]?.scrollIntoView({ block: "nearest" });
+}
+function choose(name) {
+  state.key = name; state.week = null; closeOptions(); search.blur();
+  writeHash(); render();
+}
+search.addEventListener("focus", () => { search.select(); openOptions(); });
+search.addEventListener("input", openOptions);
+search.addEventListener("blur", () => { closeOptions(); syncSearch(); });
+search.addEventListener("keydown", (e) => {
+  if (e.key === "ArrowDown") { e.preventDefault(); options.hidden ? openOptions() : moveActive(1); }
+  else if (e.key === "ArrowUp") { e.preventDefault(); moveActive(-1); }
+  else if (e.key === "Enter" && active >= 0 && shown[active]) { e.preventDefault(); choose(shown[active].name); }
+  else if (e.key === "Escape") { search.blur(); }
+});
+function syncSearch() { search.value = state.key || ""; }
+
+document.querySelectorAll(".seg button").forEach((b) => b.addEventListener("click", () => {
+  if (state.mode === b.dataset.mode) return;
+  state.mode = b.dataset.mode; state.key = null; state.week = null;
+  writeHash(); render(); search.focus();
+}));
+
+// --- widoki ---
+function lessonCard(l) {
+  const now = new Date(), d = parseIso(l.day);
+  const nowStr = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+  const isNow = iso(d) === iso(today()) && l.start <= nowStr && nowStr < l.end;
+  const kindName = D.kinds[l.kind] || l.kind;
+  const other = state.mode === "t"
+    ? (l.room ? link("r", l.room, `sala ${l.room}`) : "sala nieznana")
+    : (l.teacher ? link("t", l.teacher, l.teacher) : "prowadzący nieznany");
+  return el("div", { class: `lesson ${kindClass(l.kind)}${isNow ? " now" : ""}` },
+    el("div", { class: "time", text: `${l.start}–${l.end}` }),
+    el("div", { class: "course" }, l.course, el("span", { class: "badge", title: kindName, text: l.kind })),
+    el("div", { class: "meta" }, other, ` · ${l.groups.join(", ")}`));
+}
+function link(mode, key, text) {
+  return el("a", { href: `#${mode}=${encodeURIComponent(key)}`, title: mode === "t" ? "Plan prowadzącego" : "Plan sali", text });
+}
+
+function render() {
+  document.querySelectorAll(".seg button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.mode === state.mode)));
+  search.placeholder = state.mode === "t" ? "Wpisz nazwisko prowadzącego…" : "Wpisz numer sali…";
+  syncSearch();
+  if (!D) return;
+  const main = $("main");
+  if (!state.key) {
+    const what = state.mode === "t" ? "prowadzącego" : "salę";
+    main.replaceChildren(el("div", { class: "empty-state" },
+      el("p", { text: `Wybierz ${what} z listy powyżej.` }),
+      el("p", { class: "small", text: "Link na pasku adresu prowadzi prosto do wybranego planu — można go wysłać dalej." })));
+    document.title = "Plany WIG";
+    return;
+  }
+  document.title = `${state.key} — Plany WIG`;
+  const all = (state.mode === "t" ? byTeacher : byRoom).get(state.key);
+  const first = mondayOf(parseIso(all[0].day)), last = mondayOf(parseIso(all[all.length - 1].day));
+  if (!state.week) {
+    const cur = mondayOf(today());
+    state.week = cur < first ? first : cur > last ? last : cur;
+  }
+  const nav = el("div", { class: "weeknav" });
+  const viewBtn = el("button", { class: "btn", type: "button",
+    text: state.view === "week" ? "Lista wszystkich terminów" : "Widok tygodnia",
+    onclick: () => { state.view = state.view === "week" ? "list" : "week"; writeHash(); render(); } });
+  if (state.view === "week") {
+    const end = addDays(state.week, 6);
+    const go = (w) => { state.week = w; writeHash(); render(); };
+    nav.append(
+      el("button", { class: "btn", type: "button", title: "Poprzedni tydzień", text: "‹", onclick: () => go(addDays(state.week, -7)), ...(state.week <= first ? { disabled: "" } : {}) }),
+      el("h2", { text: `${fmtDay(state.week)} – ${fmtDay(end)} ${end.getFullYear()}` }),
+      el("button", { class: "btn", type: "button", title: "Następny tydzień", text: "›", onclick: () => go(addDays(state.week, 7)), ...(state.week >= last ? { disabled: "" } : {}) }),
+      el("button", { class: "btn", type: "button", text: "Dziś", onclick: () => go(mondayOf(today())) }),
+      el("span", { class: "spacer" }), viewBtn);
+    main.replaceChildren(nav, weekView(all));
+  } else {
+    nav.append(el("h2", { text: `Wszystkie terminy (${all.length})` }), el("span", { class: "spacer" }), viewBtn);
+    main.replaceChildren(nav, listView(all));
+  }
+}
+
+function weekView(all) {
+  const from = iso(state.week), to = iso(addDays(state.week, 6));
+  const inWeek = all.filter((l) => l.day >= from && l.day <= to);
+  const weekend = inWeek.some((l) => parseIso(l.day).getDay() % 6 === 0);
+  const count = weekend ? 7 : 5;
+  const grid = el("div", { class: "week", style: `--days:${count}` });
+  const t = iso(today());
+  for (let i = 0; i < count; i++) {
+    const d = addDays(state.week, i), key = iso(d);
+    const items = inWeek.filter((l) => l.day === key).sort((a, b) => a.start.localeCompare(b.start));
+    grid.append(el("section", { class: `day${key === t ? " today" : ""}${items.length ? "" : " blank"}` },
+      el("h3", {}, el("span", { text: DAYS[i] }), el("span", { text: fmtDay(d) })),
+      ...(items.length ? items.map((l) => lessonCard(l)) : [el("div", { class: "none", text: "brak zajęć" })])));
+  }
+  return grid;
+}
+
+function listView(all) {
+  const box = el("div", { class: "list" });
+  const t = iso(today());
+  let lastDay = null, scrollTo = null;
+  for (const l of all) {
+    if (l.day !== lastDay) {
+      lastDay = l.day;
+      const d = parseIso(l.day);
+      const h = el("div", { class: "date", text: `${DAYS[(d.getDay() + 6) % 7]}, ${fmtDay(d)} ${d.getFullYear()}${l.day === t ? " — dziś" : ""}` });
+      if (!scrollTo && l.day >= t) scrollTo = h;
+      box.append(h);
+    }
+    box.append(lessonCard(l));
+  }
+  if (scrollTo) requestAnimationFrame(() => scrollTo.scrollIntoView({ block: "start" }));
+  return box;
+}
+
+// --- motyw ---
+$("theme").addEventListener("click", () => {
+  const dark = matchMedia("(prefers-color-scheme: dark)").matches;
+  const cur = document.documentElement.dataset.theme || (dark ? "dark" : "light");
+  const next = cur === "dark" ? "light" : "dark";
+  document.documentElement.dataset.theme = next;
+  try { localStorage.setItem("theme", next); } catch {}
+});
+try { const t = localStorage.getItem("theme"); if (t) document.documentElement.dataset.theme = t; } catch {}
+
+render();
+load();
+</script>
+</body>
+</html>

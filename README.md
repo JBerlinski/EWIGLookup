@@ -6,6 +6,12 @@ plan tydzień po tygodniu albo jako listę wszystkich terminów. Adres strony zm
 z wyborem (`#t=<prowadzący>`, `#r=<sala>`), więc można też wysłać link prosto do konkretnego planu.
 Kliknięcie sali w planie prowadzącego otwiera plan tej sali (i odwrotnie).
 
+Zakładka **Wolny termin**: wybierasz prowadzącego i/lub salę, dzień i blok godzinowy, a strona od razu
+mówi, czy termin jest wolny. Jeśli nie, pokazuje zajęcia, które go zajmują, i dwa najbliższe wolne
+terminy (wolny prowadzący i sala jednocześnie; bez przeszłości, weekendów — chyba że zaznaczysz —
+i dni, w których na WIG nie ma żadnych zajęć, np. świąt). Bloki godzinowe są brane z planów.
+Kliknięcie propozycji ją sprawdza; link do wyniku można wysłać dalej.
+
 ## Skąd są dane
 
 ewig nie udostępnia planów bez logowania, a eksport CSV nie zawiera prowadzących. Dlatego

@@ -17,10 +17,11 @@ from ewiglookup.ewig import (
     page_hint,
     parse_groups,
 )
-from ewiglookup.grid import Lesson, count_cells, parse_plan_grid
+from ewiglookup.grid import Lesson, count_cells, diagnose, parse_plan_grid
 
 PAUSE_BETWEEN_GROUPS = 2  # s — nie obciążamy ewig
 GROUP_RETRY_DELAY = 60  # s — przerwa przed ponowieniem grupy w nowej sesji
+DIAGNOSED_GROUPS = 3  # dla ilu grup z niekompletną siatką opisać układ strony w logu
 DATA_VERSION = 1
 
 
@@ -49,6 +50,7 @@ class Collected:
     groups: dict[str, list[Lesson]] = field(default_factory=dict)
     failed: dict[str, str] = field(default_factory=dict)  # grupa -> powód
     warnings: list[str] = field(default_factory=list)
+    diagnostics: list[str] = field(default_factory=list)  # tylko do logu uruchomienia
 
 
 def _start_session(client: EwigClient, semester_iid: int) -> str:
@@ -101,6 +103,8 @@ def collect(client: EwigClient, config: Config, save_dir: Path | None = None) ->
                     f"Grupa {group}: siatka odczytana niekompletnie ({len(lessons)} z {cells} "
                     "zajęć na stronie)."
                 )
+                if len(out.warnings) <= DIAGNOSED_GROUPS:
+                    out.diagnostics += [f"{group}: {line}" for line in diagnose(page, iid)]
             out.groups[group] = lessons
     finally:
         client.logout()

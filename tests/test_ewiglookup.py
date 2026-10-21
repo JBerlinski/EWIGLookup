@@ -18,7 +18,7 @@ from ewiglookup.ewig import (
     menu_url,
     parse_groups,
 )
-from ewiglookup.grid import Lesson, count_cells, parse_cell, parse_plan_grid
+from ewiglookup.grid import Lesson, count_cells, diagnose, parse_cell, parse_plan_grid
 from tests.fake_ewig import FakeEwig, plan_page
 
 T1 = "dr inż. Jan Testowy"
@@ -201,3 +201,24 @@ def test_cli_fetch_without_credentials_fails(tmp_path, monkeypatch, capsys):
     assert "EWIG_LOGIN" in capsys.readouterr().err
     assert "nie zostały zaktualizowane" in summary.read_text(encoding="utf-8")
     assert not (tmp_path / "d.json").exists()
+
+
+def test_grid_reads_every_grid_table_on_page():
+    from tests.fake_ewig import plan_grid
+
+    autumn, winter = PLANS["WIG23IX1S1"][:2], PLANS["WIG23IX1S1"][2:]
+    page = f"<html><body>WIG23IX1S1{plan_grid(autumn)}<p>dalej</p>{plan_grid(winter)}</body></html>"
+    assert len(parse_plan_grid(page, 20261)) == 3
+    assert count_cells(page) == 3
+    assert diagnose(page, 20261)[0].startswith("tabel siatki: 2;")
+
+
+def test_diagnose_names_unread_cells():
+    page = plan_page("WIG23IX1S1", PLANS["WIG23IX1S1"])
+    # komórka z inną klasą (np. wyróżniony dzień) nie jest uznana za komórkę daty
+    lesson_cell = 'class="tdFormList1DSheTeaGrpHTM3" valign="top"'
+    page = page.replace(lesson_cell, lesson_cell.replace("HTM3", "HTM3x"), 1)
+    assert len(parse_plan_grid(page, 20261)) < count_cells(page)
+    lines = diagnose(page, 20261)
+    assert any("komórek na" in line and "HTM3x" in line for line in lines)
+    assert any(line.startswith("brak: Geodezja") and "HTM3x" in line for line in lines)

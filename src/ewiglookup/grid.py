@@ -46,6 +46,8 @@ class Lesson:
 @dataclass
 class _Cell:
     cls: str
+    start: int  # położenie treści komórki na stronie
+    end: int
     html: str
 
 
@@ -53,10 +55,12 @@ def _text(value: str) -> str:
     return " ".join(html.unescape(value).split())
 
 
-def _grid_table(page: str) -> str | None:
-    """Treść tabeli z siatką planu — tej, w której jest komórka dnia tygodnia (klasa *HTM0)."""
+def _grid_tables(page: str) -> list[tuple[int, int]]:
+    """Położenie treści tabel z siatką planu — tych, w których są komórki dni tygodnia
+    (klasa *HTM0). Bywa ich kilka na stronie (wtedy każda ma własne bloki dni i daty)."""
     starts: list[int] = []  # początki treści otwartych tabel
-    grid_start: int | None = None
+    grids: set[int] = set()
+    found: list[tuple[int, int]] = []
     for m in TAG.finditer(page):
         closing, name, attrs = m.group(1) == "/", m.group(2).lower(), m.group(3)
         if name == "table":
@@ -64,21 +68,20 @@ def _grid_table(page: str) -> str | None:
                 starts.append(m.end())
             elif starts:
                 start = starts.pop()
-                if start == grid_start:
-                    return page[start : m.start()]
+                if start in grids:
+                    found.append((start, m.start()))
             continue
-        if grid_start is None and not closing and name == "td" and starts:
+        if not closing and name == "td" and starts and starts[-1] not in grids:
             cls_match = CLASS_ATTR.search(attrs)
             if cls_match and "SheTeaGrpHTM0" in cls_match.group(2):
-                grid_start = starts[-1]
-    return page[grid_start:] if grid_start is not None else None
+                grids.add(starts[-1])
+    # niezamknięta tabela siatki (urwana strona) — do końca strony
+    found += [(start, len(page)) for start in starts if start in grids]
+    return sorted(found)
 
 
-def _rows(page: str) -> list[list[_Cell]]:
+def _rows(page: str, start: int, end: int) -> list[list[_Cell]]:
     """Wiersze tabeli z siatką; komórki z zagnieżdżonymi tabelami (zajęcia) jako surowy HTML."""
-    table = _grid_table(page)
-    if table is None:
-        return []
     depth = 0
     rows: list[list[_Cell]] = []
     row: list[_Cell] | None = None
@@ -88,10 +91,10 @@ def _rows(page: str) -> list[list[_Cell]]:
     def close_cell(pos: int) -> None:
         nonlocal cell_start
         if row is not None and cell_start is not None:
-            row.append(_Cell(cell_cls, table[cell_start:pos]))
+            row.append(_Cell(cell_cls, cell_start, pos, page[cell_start:pos]))
         cell_start = None
 
-    for m in TAG.finditer(table):
+    for m in TAG.finditer(page, start, end):
         closing, name, attrs = m.group(1) == "/", m.group(2).lower(), m.group(3)
         if name == "table":
             depth += -1 if closing else 1
@@ -111,7 +114,7 @@ def _rows(page: str) -> list[list[_Cell]]:
                 row = []
             cls_match = CLASS_ATTR.search(attrs)
             cell_start, cell_cls = m.end(), cls_match.group(2) if cls_match else ""
-    close_cell(len(table))
+    close_cell(end)
     if row:
         rows.append(row)
     return rows
@@ -147,42 +150,108 @@ def parse_cell(cell_html: str) -> tuple[str, str, str, int, str, str] | None:
     )
 
 
+INNER_TABLE = re.compile(r"<table\b.*?</table\s*>", re.S | re.I)
+LESSON_TABLE = re.compile(r"<table\b[^>]*\btitle\s*=.*?</table\s*>", re.S | re.I)
+
+
+@dataclass
+class _Parsed:
+    lessons: list[Lesson]
+    used: set[int]  # położenia tabel zajęć przypisanych do daty i godziny
+    notes: list[str]  # niezgodności układu siatki (do diagnostyki)
+
+
+def _parse(page: str, semester_iid: int) -> _Parsed:
+    out = _Parsed([], set(), [])
+    for number, (start, end) in enumerate(_grid_tables(page), 1):
+        dates: list[date | None] = []
+        for index, row in enumerate(_rows(page, start, end)):
+            header = [c for c in row if "DDSheTeaGrpHTM3" in c.cls]
+            if header:
+                dates = []
+                for c in header:
+                    d = DATE.search(c.html)
+                    month = ROMAN.get(d.group(2).upper()) if d else None
+                    if d and month:
+                        dates.append(date(year_for(month, semester_iid), month, int(d.group(1))))
+                    else:
+                        dates.append(None)
+                continue
+            times = next((TIMES.search(c.html) for c in row if TIMES.search(c.html)), None)
+            if times is None:
+                continue
+            slots = [c for c in row if c.cls.endswith("SheTeaGrpHTM3") and "DD" not in c.cls]
+            if len(slots) != len(dates):
+                classes = ", ".join(sorted({c.cls for c in row}))
+                out.notes.append(
+                    f"tabela {number}, wiersz {index} ({times.group(1)}): {len(slots)} komórek "
+                    f"na {len(dates)} dat, {len(row)} komórek w wierszu; klasy: {classes}"
+                )
+            for day, cell in zip(dates, slots, strict=False):
+                if day is None or "<table" not in cell.html.lower():
+                    continue
+                for inner in INNER_TABLE.finditer(cell.html):
+                    parsed = parse_cell(inner.group(0))
+                    if parsed:
+                        course, kind, kind_name, seq, teacher, room = parsed
+                        begin, finish = (t.zfill(5) for t in times.groups())
+                        out.lessons.append(
+                            Lesson(course, kind, kind_name, seq, teacher, room, day, begin, finish)
+                        )
+                        own = LESSON_TABLE.search(inner.group(0))  # bez tabel-opakowań
+                        out.used.add(cell.start + inner.start() + (own.start() if own else 0))
+    out.lessons.sort(key=lambda e: (e.day, e.start, e.course))
+    return out
+
+
 def parse_plan_grid(page: str, semester_iid: int) -> list[Lesson]:
     """Zajęcia z siatki planu grupy, posortowane chronologicznie."""
-    lessons: list[Lesson] = []
-    dates: list[date | None] = []
-    for row in _rows(page):
-        header = [c for c in row if "DDSheTeaGrpHTM3" in c.cls]
-        if header:
-            dates = []
-            for c in header:
-                d = DATE.search(c.html)
-                month = ROMAN.get(d.group(2).upper()) if d else None
-                if d and month:
-                    dates.append(date(year_for(month, semester_iid), month, int(d.group(1))))
-                else:
-                    dates.append(None)
-            continue
-        times = next((TIMES.search(c.html) for c in row if TIMES.search(c.html)), None)
-        if times is None:
-            continue
-        slots = [c for c in row if c.cls.endswith("SheTeaGrpHTM3") and "DD" not in c.cls]
-        for day, cell in zip(dates, slots, strict=False):
-            if day is None or "<table" not in cell.html.lower():
-                continue
-            for inner in re.findall(r"<table\b.*?</table\s*>", cell.html, re.S | re.I):
-                parsed = parse_cell(inner)
-                if parsed:
-                    course, kind, kind_name, seq, teacher, room = parsed
-                    start, end = (t.zfill(5) for t in times.groups())
-                    lessons.append(
-                        Lesson(course, kind, kind_name, seq, teacher, room, day, start, end)
-                    )
-    lessons.sort(key=lambda e: (e.day, e.start, e.course))
-    return lessons
+    return _parse(page, semester_iid).lessons
 
 
 def count_cells(page: str) -> int:
     """Liczba tabel zajęć na stronie — do kontroli, czy siatka odczytała wszystkie."""
-    tables = re.findall(r"<table\b[^>]*\btitle\s*=.*?</table\s*>", page, re.S | re.I)
-    return sum(1 for t in tables if parse_cell(t))
+    return sum(1 for t in LESSON_TABLE.findall(page) if parse_cell(t))
+
+
+def _where(page: str, pos: int, grids: list[tuple[int, int]]) -> str:
+    """Opis miejsca tabeli zajęć: w której tabeli siatki, w jakiej komórce i wierszu."""
+    for number, (start, end) in enumerate(grids, 1):
+        if not start <= pos < end:
+            continue
+        for index, row in enumerate(_rows(page, start, end)):
+            for col, cell in enumerate(row):
+                if cell.start <= pos < cell.end:
+                    times = next((TIMES.search(c.html) for c in row if TIMES.search(c.html)), None)
+                    when = times.group(1) if times else "bez godzin"
+                    return (
+                        f"tabela {number}, wiersz {index} ({when}), komórka {col}/{len(row)} "
+                        f"klasy {cell.cls or '-'}"
+                    )
+        return f"tabela {number}, poza komórkami wierszy"
+    before = re.sub(r"\s+", " ", page[max(0, pos - 160) : pos])
+    return f"poza siatką; wcześniej: …{before}"
+
+
+def diagnose(page: str, semester_iid: int, limit: int = 8) -> list[str]:
+    """Dlaczego część zajęć ze strony nie trafiła do siatki — opis układu (bez danych sesji)."""
+    grids = _grid_tables(page)
+    parsed = _parse(page, semester_iid)
+    classes: dict[str, int] = {}
+    for start, end in grids:
+        for row in _rows(page, start, end):
+            for cell in row:
+                classes[cell.cls] = classes.get(cell.cls, 0) + 1
+    lines = [
+        f"tabel siatki: {len(grids)}; klasy komórek: "
+        + ", ".join(f"{k or '-'}×{n}" for k, n in sorted(classes.items()))
+    ]
+    lines += parsed.notes[:limit]
+    missing = [m for m in LESSON_TABLE.finditer(page) if m.start() not in parsed.used]
+    missing = [m for m in missing if parse_cell(m.group(0))]
+    for m in missing[:limit]:
+        course, kind, _name, seq, _teacher, _room = parse_cell(m.group(0))
+        lines.append(f"brak: {course} ({kind}) [{seq}] — {_where(page, m.start(), grids)}")
+    if len(missing) > limit:
+        lines.append(f"… i {len(missing) - limit} więcej")
+    return lines

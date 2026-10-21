@@ -41,6 +41,9 @@ def cmd_fetch(args: argparse.Namespace) -> int:
     _write(data, args.out)
     report = summary(collected, data, client.notes)
     print(report)
+    if collected.diagnostics:
+        print("### Diagnostyka siatki\n")
+        print("\n".join(f"- {line}" for line in collected.diagnostics))
     if args.summary:
         with open(args.summary, "a", encoding="utf-8") as f:
             f.write(report)

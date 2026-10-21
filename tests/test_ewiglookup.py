@@ -222,3 +222,15 @@ def test_diagnose_names_unread_cells():
     lines = diagnose(page, 20261)
     assert any("komórek na" in line and "HTM3x" in line for line in lines)
     assert any(line.startswith("brak: Geodezja") and "HTM3x" in line for line in lines)
+
+
+def test_maintenance_page_is_outage_not_empty_group():
+    fake = FakeEwig(PLANS)
+    fake.maintenance = True
+    c = client(fake)
+    with pytest.raises(EwigConnectionError, match="przerwa techniczna"):
+        collect(c, CONFIG)
+    assert fake.logins == 2  # jedna próba w nowej sesji, potem przerwanie całości
+    plan_requests = [q for _, path, q in fake.log if path == "/ed2/logged.php" and "exv" in q]
+    assert {q["exv"][0] for q in plan_requests} == {"WIG23IX1S1"}  # dalsze grupy nie są odpytywane
+    assert not fake.logged_in

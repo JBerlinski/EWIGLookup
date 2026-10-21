@@ -118,6 +118,7 @@ class FakeEwig(BaseAdapter):
         self.log: list[tuple[str, str, dict]] = []
         self.failures: dict[str, list[int]] = {}  # grupa -> kolejne kody HTTP przed sukcesem
         self.broken: set[str] = set()  # grupy, których plan się nie otwiera
+        self.maintenance = False  # strona przerwy technicznej serwisu WAT zamiast planów
 
     def _response(self, request, status: int, body: bytes) -> requests.Response:
         response = requests.Response()
@@ -157,6 +158,9 @@ class FakeEwig(BaseAdapter):
         elif url.path == "/ed2/index.php" and query.get("lou") == ["1"]:
             self.logged_in = False
             page = LOGIN_PAGE
+        elif url.path == "/ed2/logged.php" and self.maintenance and "exv" in query:
+            body = "<html>Zapraszamy wkrótce SERWIS CENTRALNY WAT Chwilowa niedostępność</html>"
+            return self._response(request, 200, body.encode("utf-8"))
         elif url.path == "/ed2/logged.php":
             if not self.logged_in or query.get("sid") != [SID]:
                 page = LOGIN_PAGE

@@ -33,6 +33,10 @@ USER_AGENT = (
     "Chrome/135.0 Safari/537.36 ewiglookup/0.1"
 )
 
+# Strona przerwy technicznej serwisu centralnego WAT (HTTP 200, w UTF-8, nie ISO-8859-2) —
+# traktowana jak błąd 5xx: ewig chwilowo nie działa, nie „pusta grupa”.
+MAINTENANCE_MARKERS = (b"SERWIS CENTRALNY WAT", b"Chwilowa niedost")
+
 SID_IN_PAGE = re.compile(r"var sid = new String\('([0-9a-fA-F]+)'\)")
 OPTION = re.compile(r"""<option\b[^>]*?\bvalue\s*=\s*(["']?)([^"'\s>]*)\1""", re.I)
 SHOW_GROUP = re.compile(r"""showGroupPlan\(\s*(["'])([^"']+)\1""", re.I)
@@ -169,9 +173,12 @@ class EwigClient:
                             EwigSessionError if response.status_code in (401, 403) else EwigError
                         )
                         raise error(f"ewig zwrócił HTTP {response.status_code} — krok: {where}.")
-                    self._referer = response.url or url
-                    return response
-                last = f"HTTP {response.status_code}"
+                    if not any(m in response.content for m in MAINTENANCE_MARKERS):
+                        self._referer = response.url or url
+                        return response
+                    last = "przerwa techniczna („Chwilowa niedostępność systemu”)"
+                else:
+                    last = f"HTTP {response.status_code}"
             if attempt < len(delays):
                 self.notes.append(f"ponawiam za {delays[attempt]} s — {where}: {last}")
                 self._sleep(delays[attempt])

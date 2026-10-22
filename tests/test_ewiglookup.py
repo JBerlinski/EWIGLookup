@@ -308,11 +308,15 @@ def test_plans_in_data_point_at_lessons(tmp_path):
     plans = load_plans(str(path))
     collected = Collected(groups=PLANS)
     data = to_data(collected, 20261, usable_plans(plans, collected))
-    by_name = {p["name"]: p["lessons"] for p in data["plans"]}
-    assert len(by_name["WIG23IX1S1"]) == 3
+    by_name = {p["name"]: p for p in data["plans"]}
+    assert len(by_name["WIG23IX1S1"]["lessons"]) == 3
     # wspólny wykład jest raz; laboratoria obu grup w różnych godzinach — oba zostają
-    assert len(by_name["WIG23IX2S1"]) == 4
-    assert all(0 <= i < len(data["lessons"]) for ids in by_name.values() for i in ids)
+    assert len(by_name["WIG23IX2S1"]["lessons"]) == 4
+    assert {p["source"] for p in data["plans"]} == {"ewig"}  # bez kalendarzy
+    lecture = by_name["WIG23IX2S1"]["lessons"][0]
+    assert lecture[:3] == ["2026-10-01", "08:00", "09:35"]
+    assert [data["groups"][i] for i in lecture[8]] == ["WIG23IX1S1", "WIG23IX2S1"]
+    assert lecture[9] == ""  # bez dopisku o ręcznej zmianie
 
 
 def test_plan_with_missing_group_is_skipped():
@@ -327,3 +331,128 @@ def test_keep_all_policy_keeps_colliding_lessons():
     plan = Plan("P", (("A", "a"), ("B", "b")), (), keep_all=True)
     groups = {"A": [_l("X", d, "08:00", "09:35")], "B": [_l("Y", d, "08:00", "09:35")]}
     assert len(plan_lessons(plan, groups)) == 2
+
+
+# --- plany grup z Kalendarza Google -----------------------------------------------------------
+
+from ewiglookup.build import calendar_plans  # noqa: E402
+from ewiglookup.gcal import (  # noqa: E402
+    CalendarError,
+    calendar_plan,
+    event_lesson,
+    group_hashes,
+    manual_changes,
+)
+
+SOURCES = {"Grupa kierunkowa": "WIG23IX2S1", "Grupa domyślna": "WIG23IX1S1"}
+
+
+def gcalsync_event(start="2026-10-23T09:50:00", end="2026-10-23T11:25:00", **changes):
+    """Zdarzenie tak, jak zapisuje je gcalsync (event_body), a potem zwraca Google."""
+    body = {
+        "summary": "Seminarium dyplomowe (S)",
+        "description": "Przedmiot: Seminarium dyplomowe\nTyp zajęć: S\nProwadzący: dr Jan Testowy"
+        "\nZajęcia nr: 3\nŹródło: Grupa kierunkowa\n\nPlan z e-Dziekanatu (gcalsync).",
+        "location": "18 58",
+        "start": {"dateTime": start, "timeZone": "Europe/Warsaw"},
+        "end": {"dateTime": end, "timeZone": "Europe/Warsaw"},
+        "extendedProperties": {"private": {"gcalsync_managed": "1", "gcalsync_key": "k"}},
+    }
+    hashes = group_hashes(body)
+    body["extendedProperties"]["private"]["gcalsync_h"] = ";".join(
+        f"{g}={h}" for g, h in hashes.items()
+    )
+    # Google zwraca czas z offsetem — skróty muszą wyjść takie same
+    body["start"] = {"dateTime": start + "+02:00", "timeZone": "Europe/Warsaw"}
+    body["end"] = {"dateTime": end + "+02:00", "timeZone": "Europe/Warsaw"}
+    return body | changes
+
+
+def test_calendar_event_becomes_lesson_with_teacher_room_and_group():
+    plan_lesson = event_lesson(gcalsync_event(), SOURCES, {"S": "Seminarium"})
+    lesson = plan_lesson.lesson
+    assert (lesson.course, lesson.kind, lesson.kind_name, lesson.seq) == (
+        "Seminarium dyplomowe", "S", "Seminarium", 3,
+    )  # fmt: skip
+    assert (lesson.teacher, lesson.room) == ("dr Jan Testowy", "18 58")
+    assert (lesson.day, lesson.start, lesson.end) == (date(2026, 10, 23), "09:50", "11:25")
+    assert plan_lesson.groups == ("WIG23IX2S1",)
+    assert plan_lesson.note == ""  # niezmienione od zapisu przez gcalsync
+
+
+def test_manual_changes_are_recognized_like_gcalsync():
+    moved = gcalsync_event()
+    moved["start"] = {"dateTime": "2026-10-23T08:00:00+02:00", "timeZone": "Europe/Warsaw"}
+    moved["end"] = {"dateTime": "2026-10-23T09:35:00+02:00", "timeZone": "Europe/Warsaw"}
+    moved["location"] = "100 5"
+    assert manual_changes(moved) == "zmieniono ręcznie: czas, sala"
+    own = {"summary": "Konsultacje", "start": moved["start"], "end": moved["end"]}
+    assert manual_changes(own) == "dodane ręcznie"
+    lesson = event_lesson(own, SOURCES, {}).lesson
+    assert (lesson.course, lesson.kind, lesson.teacher) == ("Konsultacje", "", "")
+
+
+def test_non_lesson_events_are_skipped():
+    state = gcalsync_event(extendedProperties={"private": {"gcalsync_state": "1"}})
+    all_day = {"summary": "Wolne", "start": {"date": "2026-11-02"}, "end": {"date": "2026-11-03"}}
+    cancelled = gcalsync_event(status="cancelled")
+    events = [state, all_day, cancelled, gcalsync_event()]
+    assert len(calendar_plan(events, SOURCES, {})) == 1
+
+
+class FakeGoogle(requests.adapters.BaseAdapter):
+    """Token i lista zdarzeń Google Calendar (dwie strony) bez sieci."""
+
+    def __init__(self, events, token_status=200):
+        super().__init__()
+        self.events, self.token_status, self.requests = events, token_status, []
+
+    def send(self, request, **kwargs):
+        self.requests.append(request)
+        response = requests.Response()
+        response.request, response.url = request, request.url
+        if "oauth2" in request.url:
+            response.status_code = self.token_status
+            response._content = b'{"access_token": "abc"}'
+            return response
+        assert request.headers["Authorization"] == "Bearer abc"
+        page = 1 if "pageToken=p2" in request.url else 0
+        body = {"items": self.events[page::2]}
+        if page == 0:
+            body["nextPageToken"] = "p2"
+        response.status_code = 200
+        response._content = json.dumps(body).encode()
+        return response
+
+    def close(self):
+        pass
+
+
+TOKEN = json.dumps({"client_id": "c", "client_secret": "s", "refresh_token": "r",
+                    "token_uri": "https://oauth2.googleapis.com/token"})  # fmt: skip
+
+
+def test_calendar_plans_read_each_plan_calendar_with_paging():
+    plans = [
+        Plan("WIG23IX2S1", (("WIG23IX2S1", "Grupa kierunkowa"),), (), calendar_id="ix2@group"),
+        Plan("WIG23IX1S1", (("WIG23IX1S1", "Grupa"),), ()),  # bez kalendarza -> z ewig
+    ]
+    session = requests.Session()
+    later = gcalsync_event("2026-10-23T11:40:00", "2026-10-23T13:15:00")
+    fake = FakeGoogle([gcalsync_event(), later])
+    session.mount("https://", fake)
+    found = calendar_plans(plans, TOKEN, Collected(groups=PLANS), session=session)
+    assert list(found) == ["WIG23IX2S1"]
+    assert [p.lesson.start for p in found["WIG23IX2S1"]] == ["09:50", "11:40"]
+    assert "ix2%40group" in fake.requests[1].url
+    data = to_data(Collected(groups=PLANS), 20261, plans, calendars=found)
+    assert [p["source"] for p in data["plans"]] == ["kalendarz", "ewig"]
+    assert data["rooms"].count("18 58") == 1  # sala z kalendarza w słowniku
+
+
+def test_rejected_google_token_is_calendar_error():
+    session = requests.Session()
+    session.mount("https://", FakeGoogle([], token_status=400))
+    plans = [Plan("P", (("WIG23IX2S1", "g"),), (), calendar_id="x")]
+    with pytest.raises(CalendarError, match="odrzucił token"):
+        calendar_plans(plans, TOKEN, Collected(groups=PLANS), session=session)

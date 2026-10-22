@@ -7,7 +7,7 @@ z wyborem (`#t=<prowadzący>`, `#r=<sala>`), więc można też wysłać link pro
 Kliknięcie sali w planie prowadzącego otwiera plan tej sali (i odwrotnie).
 
 Zakładki **WIG23IX2S1**, **WIG23IX1S1** (po jednej na każdy plan z gcalsync): plan naszej grupy
-złożony tak jak w gcalsync, z prowadzącym i salą przy każdych zajęciach (`#g=<plan>`).
+z prowadzącym i salą przy każdych zajęciach (`#g=<plan>`).
 
 Zakładka **Przełożenie zajęć**: czy zajęcia z danym prowadzącym można przełożyć na dany termin
 do danej sali tak, żeby pasowało naszym grupom. Wybierasz prowadzącego, salę, grupy (plany
@@ -17,10 +17,23 @@ najbliższe pasujące terminy (bez przeszłości, weekendów — chyba że zazna
 na WIG, np. świąt). Pod spodem siatka całego tygodnia: zajętość sali, prowadzącego i grup razem,
 wolny blok można kliknąć. Link do wyniku można wysłać dalej.
 
-Plany grup automat pobiera przy każdym uruchomieniu z `gcalsync.config.json` w repozytorium
-[gcalsync](https://github.com/JBerlinski/Gcalsync) i składa tak jak gcalsync: reguły wykluczeń,
-jeden egzemplarz duplikatu z ważniejszej grupy, odrzucenie zajęć mniej ważnej grupy kolidujących
-z ważniejszą. Plan, którego grupy nie udało się pobrać, jest pomijany.
+### Plany naszych grup = Kalendarz Google
+
+Plany naszych grup edytuje się wyłącznie w Kalendarzu Google (kalendarze gcalsync), także przez
+osoby, którym kalendarz udostępniono. Dlatego automat czyta je **z kalendarzy** (lista planów
+i ID kalendarzy z `gcalsync.config.json` w repozytorium
+[gcalsync](https://github.com/JBerlinski/Gcalsync)): przeniesienia, zmiany sal, usunięte i dodane
+zajęcia są na stronie tak jak w kalendarzu. Zajęcia zmienione ręcznie mają dopisek
+(„zmieniono ręcznie: czas, sala”, „dodane ręcznie”) — rozpoznawane tak jak w gcalsync, po skrótach
+pól zapisanych w zdarzeniu. Prowadzący i sala są brane z opisu i lokalizacji zdarzenia.
+
+Plany prowadzących i sal zostają z e-Dziekanatu (ręczne usunięcie w kalendarzu grupy zwykle znaczy
+„nie chodzimy”, nie „zajęcia odwołane”).
+
+Do odczytu potrzebny jest sekret `GOOGLE_TOKEN_JSON` — ten sam token co w gcalsync (zawartość
+`%LOCALAPPDATA%\gcalsync\token.json`; tylko odczyt kalendarzy gcalsync). Bez niego (albo gdy
+Google odmówi) plany grup są składane z e-Dziekanatu tak jak w gcalsync — bez ręcznych zmian —
+a strona to zaznacza.
 
 ## Skąd są dane
 
@@ -46,7 +59,7 @@ grupy są wypisane w podsumowaniu uruchomienia i w ostrzeżeniu na stronie.
 ### Jednorazowa konfiguracja
 
 1. **Settings → Secrets and variables → Actions → New repository secret:** `EWIG_LOGIN`,
-   `EWIG_PASSWORD` (te same co w gcalsync).
+   `EWIG_PASSWORD`, `GOOGLE_TOKEN_JSON` (te same co w gcalsync).
 2. **Settings → Pages → Build and deployment → Source: „GitHub Actions”.**
    GitHub Pages w repozytorium prywatnym wymaga GitHub Pro; na darmowym koncie repozytorium musi
    być publiczne (publiczny jest wtedy tylko kod — dane są wyłącznie na stronie).

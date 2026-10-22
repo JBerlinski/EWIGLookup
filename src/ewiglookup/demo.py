@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import random
+from dataclasses import replace
 from datetime import date, timedelta
 
-from ewiglookup.build import Collected
+from ewiglookup.build import Collected, ewig_plan
+from ewiglookup.gcal import PlanLesson
 from ewiglookup.grid import Lesson
 from ewiglookup.plans import Plan, Rule
 
@@ -65,3 +67,18 @@ def demo_collected(seed: int = 7, start: date = date(2026, 10, 1), weeks: int = 
     for group in groups[:3]:
         out.groups[group].append(shared)
     return out
+
+
+def demo_calendars(collected: Collected) -> dict[str, list[PlanLesson]]:
+    """Plan WIG23IX2S1 „z Kalendarza Google”: jedne zajęcia przeniesione ręcznie, jedne dodane."""
+    plan = ewig_plan(DEMO_PLANS[0], collected.groups)
+    moved = plan[5]
+    plan[5] = PlanLesson(
+        replace(moved.lesson, start="17:35", end="19:10", room="18 58"),
+        moved.groups,
+        "zmieniono ręcznie: czas, sala",
+    )
+    first = plan[0].lesson
+    extra = Lesson("Konsultacje", "", "", 0, "", "", first.day, "19:25", "21:00")
+    plan.append(PlanLesson(extra, (), "dodane ręcznie"))
+    return {DEMO_PLANS[0].name: plan}

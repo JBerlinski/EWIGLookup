@@ -94,6 +94,7 @@ class Plan:
     groups: tuple[tuple[str, str], ...]  # (kod grupy, nazwa źródła) w kolejności priorytetu
     rules: tuple[Rule, ...]
     keep_all: bool = False  # polityka „keep-all”: kolizje między grupami nie są rozwiązywane
+    calendar_id: str | None = None  # kalendarz Google planu (zawartość = plan z ręcznymi zmianami)
 
 
 def parse_plans(data: dict) -> list[Plan]:
@@ -106,6 +107,7 @@ def parse_plans(data: dict) -> list[Plan]:
                 groups=tuple((g["code"], g.get("name", g["code"])) for g in p["groups"]),
                 rules=tuple(Rule.from_dict(r) for r in p.get("rules", [])),
                 keep_all=keep_all,
+                calendar_id=(p.get("calendar") or {}).get("id") or None,
             )
             for p in data["plans"]
         ]

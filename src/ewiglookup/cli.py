@@ -8,8 +8,17 @@ import os
 import sys
 from pathlib import Path
 
-from ewiglookup.build import Config, check, collect, summary, to_data, usable_plans
+from ewiglookup.build import (
+    Config,
+    calendar_plans,
+    check,
+    collect,
+    summary,
+    to_data,
+    usable_plans,
+)
 from ewiglookup.ewig import EwigClient, EwigError
+from ewiglookup.gcal import CalendarError
 from ewiglookup.plans import Plan, PlanConfigError, load_plans
 
 DEFAULT_OUT = Path("site/data.json")
@@ -44,7 +53,19 @@ def cmd_fetch(args: argparse.Namespace) -> int:
             plans = usable_plans(load_plans(config.gcalsync_config), collected)
         except PlanConfigError as exc:
             collected.warnings.append(f"{exc} Wyszukiwarka terminów będzie bez planów grup.")
-    data = to_data(collected, config.semester_iid, plans)
+    # Plany naszych grup z Kalendarza Google (tam są edytowane); bez tokenu — z ewig.
+    calendars = {}
+    token = os.environ.get("GOOGLE_TOKEN_JSON", "")
+    if plans and token.strip():
+        try:
+            calendars = calendar_plans(plans, token, collected)
+        except CalendarError as exc:
+            collected.warnings.append(f"{exc} Plany grup z e-Dziekanatu, bez ręcznych zmian.")
+    elif plans:
+        collected.warnings.append(
+            "Brak GOOGLE_TOKEN_JSON — plany grup z e-Dziekanatu, bez ręcznych zmian z kalendarza."
+        )
+    data = to_data(collected, config.semester_iid, plans, calendars=calendars)
     _write(data, args.out)
     report = summary(collected, data, client.notes)
     print(report)
@@ -58,9 +79,11 @@ def cmd_fetch(args: argparse.Namespace) -> int:
 
 
 def cmd_demo(args: argparse.Namespace) -> int:
-    from ewiglookup.demo import DEMO_PLANS, demo_collected
+    from ewiglookup.demo import DEMO_PLANS, demo_calendars, demo_collected
 
-    _write(to_data(demo_collected(), 20261, DEMO_PLANS), args.out)
+    collected = demo_collected()
+    calendars = demo_calendars(collected)
+    _write(to_data(collected, 20261, DEMO_PLANS, calendars=calendars), args.out)
     return 0
 
 

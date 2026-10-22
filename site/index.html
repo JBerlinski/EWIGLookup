@@ -128,6 +128,7 @@
   .checks .checks { margin-top: 0; }
   .checks .check { margin-top: 0; }
   .checks-label { font-size: 13px; color: var(--muted); font-weight: 600; }
+  .note { font-size: 12px; font-weight: 600; color: var(--accent); margin-top: 2px; }
   .why { font-size: 12px; font-weight: 600; color: var(--bad-text); margin-top: 2px; }
   .weekhead { display: flex; align-items: center; gap: 8px; margin: 20px 0 8px; }
   .weekhead h3 { margin: 0 4px; }
@@ -251,9 +252,10 @@
     </div>
     <div class="result" id="f-result"></div>
     <details class="hint"><summary>Jak to działa?</summary>
-      <p>Termin pasuje, gdy wolni są jednocześnie prowadzący, sala i zaznaczone grupy (plany
-      złożone jak w gcalsync: grupy w kolejności priorytetu, bez wykluczonych przedmiotów).
-      Zajętość wynika z planów grup WIG w e-Dziekanacie. Nie widać tu zajęć prowadzącego na innych
+      <p>Termin pasuje, gdy wolni są jednocześnie prowadzący, sala i zaznaczone grupy. Plany naszych
+      grup są brane z ich Kalendarzy Google (z gcalsync), razem z ręcznymi zmianami — przeniesieniami,
+      zmianami sal, usuniętymi i dodanymi zajęciami. Zajętość prowadzących i sal wynika z planów grup
+      WIG w e-Dziekanacie. Nie widać tu zajęć prowadzącego na innych
       wydziałach, konsultacji ani rezerwacji sal spoza planu. Dni, w których na WIG nie ma żadnych zajęć
       (święta, przerwy), nie są proponowane.</p>
     </details>
@@ -332,19 +334,22 @@ async function load() {
     $("main").replaceChildren(el("div", { class: "empty-state", text: `Nie udało się wczytać planów (${e.message}).` }));
     return;
   }
-  lessons = D.lessons.map(([day, start, end, c, kind, seq, t, r, g]) => ({
+  const unpack = ([day, start, end, c, kind, seq, t, r, g, note]) => ({
     day, start, end, course: D.courses[c], kind, seq,
-    teacher: D.teachers[t], room: D.rooms[r], groups: g.map((i) => D.groups[i]),
-  }));
+    teacher: D.teachers[t], room: D.rooms[r], groups: g.map((i) => D.groups[i]), note: note || "",
+  });
+  lessons = D.lessons.map(unpack);
   for (const l of lessons) {
     if (l.teacher) (byTeacher.get(l.teacher) || byTeacher.set(l.teacher, []).get(l.teacher)).push(l);
     if (l.room) (byRoom.get(l.room) || byRoom.set(l.room, []).get(l.room)).push(l);
   }
   BLOCKS = blocksOf(lessons);
   CLASS_DAYS = [...new Set(lessons.map((l) => l.day))].sort();
+  // plany naszych grup: z Kalendarza Google (z ręcznymi zmianami) albo, bez dostępu do niego, z ewig
   PLANS = (D.plans || []).map((p) => {
-    const own = p.lessons.map((i) => lessons[i]);
-    return { name: p.name, lessons: own, byDay: byDayOf(own) };
+    const own = p.lessons.map((x) => (typeof x === "number" ? lessons[x] : unpack(x)))
+      .sort((x, y) => x.day.localeCompare(y.day) || x.start.localeCompare(y.start));
+    return { name: p.name, source: p.source || "ewig", lessons: own, byDay: byDayOf(own) };
   });
   document.querySelector(".seg").append(...PLANS.map((p) => el("button", {
     type: "button", class: "plan", "data-mode": "g", "data-plan": p.name, "aria-pressed": "false",
@@ -510,7 +515,8 @@ function lessonCard(l, show = { t: "r", r: "t" }[state.mode] || "both") {
   return el("div", { class: `lesson ${kindClass(l.kind)}${isNow ? " now" : ""}` },
     el("div", { class: "time", text: `${l.start}–${l.end}` }),
     el("div", { class: "course" }, l.course, el("span", { class: "badge", title: kindName, text: l.kind })),
-    el("div", { class: "meta" }, ...meta, ` · ${l.groups.join(", ")}`));
+    el("div", { class: "meta" }, ...meta, l.groups.length ? ` · ${l.groups.join(", ")}` : ""),
+    l.note ? el("div", { class: "note", text: `✎ ${l.note} (Kalendarz Google)` }) : null);
 }
 function link(mode, key, text) {
   return el("a", { href: `#${mode}=${encodeURIComponent(key)}`, title: mode === "t" ? "Plan prowadzącego" : "Plan sali", text });
@@ -546,7 +552,8 @@ function render() {
     return;
   }
   document.title = `${state.key} — Plany WIG`;
-  const first = mondayOf(parseIso(all[0].day)), last = mondayOf(parseIso(all[all.length - 1].day));
+  const days = all.map((l) => l.day).sort();
+  const first = mondayOf(parseIso(days[0])), last = mondayOf(parseIso(days[days.length - 1]));
   if (!state.week) {
     const cur = mondayOf(today());
     state.week = cur < first ? first : cur > last ? last : cur;
@@ -565,11 +572,18 @@ function render() {
       el("button", { class: "btn", type: "button", title: "Następny tydzień", text: "›", onclick: () => go(addDays(state.week, 7)), ...(state.week >= last ? { disabled: "" } : {}) }),
       el("button", { class: "btn", type: "button", text: "Dziś", onclick: () => go(mondayOf(today())) }),
       el("span", { class: "spacer" }), viewBtn);
-    main.replaceChildren(nav, weekView(all));
+    main.replaceChildren(...planSource(), nav, weekView(all));
   } else {
     nav.append(el("h2", { text: `Wszystkie terminy (${all.length})` }), el("span", { class: "spacer" }), viewBtn);
-    main.replaceChildren(nav, listView(all));
+    main.replaceChildren(...planSource(), nav, listView(all));
   }
+}
+
+/** Skąd jest plan grupy — tylko gdy nie z jej Kalendarza Google. */
+function planSource(names = state.mode === "g" ? [state.key] : []) {
+  const fallback = PLANS.filter((p) => names.includes(p.name) && p.source !== "kalendarz").map((p) => p.name);
+  return fallback.length ? [el("div", { class: "notice",
+    text: `Plan ${fallback.join(", ")} jest z e-Dziekanatu — bez ręcznych zmian z Kalendarza Google (brak dostępu do kalendarza przy ostatniej aktualizacji).` })] : [];
 }
 
 function weekView(all) {
@@ -613,17 +627,21 @@ const selectedPlans = () => finder.g ?? PLANS.map((p) => p.name);
 /** Zajęcia prowadzącego, sali i wybranych grup w danym dniu nachodzące na godziny — z opisem,
  *  kogo zajmują: [{l, why: ["prowadzący", "sala", "WIG23IX2S1", …]}]. */
 function conflicts(day, start, end) {
-  const a = toMin(start), b = toMin(end), found = new Map();
+  const a = toMin(start), b = toMin(end), found = new Map();  // klucz zajęć -> {l, why}
   const add = (list, why) => {
     for (const l of list || []) {
-      if (toMin(l.start) < b && a < toMin(l.end)) (found.get(l) || found.set(l, []).get(l)).push(why);
+      if (!(toMin(l.start) < b && a < toMin(l.end))) continue;
+      const id = [l.start, l.end, l.course, l.kind, l.room].join("|");
+      const hit = found.get(id) || found.set(id, { l, why: [] }).get(id);
+      if (l.note && !hit.l.note) hit.l = l;  // wersja z kalendarza (z dopiskiem) ma pierwszeństwo
+      hit.why.push(why);
     }
   };
   if (finder.t) add(dayIndex(byTeacher, finder.t).get(day), "prowadzący");
   if (finder.r) add(dayIndex(byRoom, finder.r).get(day), "sala");
   const chosen = selectedPlans();
   for (const p of PLANS) if (chosen.includes(p.name)) add(p.byDay.get(day), p.name);
-  return [...found].map(([l, why]) => ({ l, why })).sort((x, y) => x.l.start.localeCompare(y.l.start));
+  return [...found.values()].sort((x, y) => x.l.start.localeCompare(y.l.start));
 }
 const dayIndexCache = new Map();
 function dayIndex(map, key) {
@@ -745,7 +763,7 @@ function renderFinder() {
     .filter(Boolean).join(" · ");
   const busy = conflicts(finder.d, block.start, block.end);
   const term = `${fmtLong(finder.d)}, ${block.start}–${block.end}`;
-  const parts = [];
+  const parts = [...planSource(groups)];
   const first = CLASS_DAYS[0], last = CLASS_DAYS[CLASS_DAYS.length - 1];
   if (finder.d < first || finder.d > last) {
     parts.push(el("div", { class: "notice", text: `Plan w e-Dziekanacie obejmuje dni od ${fmtLong(first)} do ${fmtLong(last)} — o tym terminie nic nie wiadomo.` }));

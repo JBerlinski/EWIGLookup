@@ -40,6 +40,8 @@ jobs:
         env:
           EWIG_LOGIN: ${{ secrets.EWIG_LOGIN }}
           EWIG_PASSWORD: ${{ secrets.EWIG_PASSWORD }}
+          # token gcalsync (tylko odczyt kalendarzy planów naszych grup); bez niego plany z ewig
+          GOOGLE_TOKEN_JSON: ${{ secrets.GOOGLE_TOKEN_JSON }}
         # Przy błędzie (ewig nie działa, za dużo nieudanych grup) zadanie kończy się błędem
         # i strona nie jest publikowana — zostaje poprzednia wersja.
         run: uv run --frozen --no-dev ewiglookup fetch --out site/data.json --summary "$GITHUB_STEP_SUMMARY"

@@ -8,6 +8,8 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
+import requests
+
 from ewiglookup.ewig import (
     EwigClient,
     EwigConnectionError,
@@ -17,6 +19,7 @@ from ewiglookup.ewig import (
     page_hint,
     parse_groups,
 )
+from ewiglookup.gcal import PlanLesson, access_token, calendar_plan, list_events
 from ewiglookup.grid import Lesson, count_cells, diagnose, parse_plan_grid
 from ewiglookup.plans import GCALSYNC_CONFIG_URL, Plan, plan_lessons
 
@@ -147,6 +150,39 @@ def usable_plans(plans: Iterable[Plan], collected: Collected) -> list[Plan]:
     return usable
 
 
+def ewig_plan(plan: Plan, groups: dict[str, list[Lesson]]) -> list[PlanLesson]:
+    """Plan grupy złożony z ewig (gdy nie ma dostępu do jej kalendarza)."""
+    return [
+        PlanLesson(lesson, tuple(code for code, _ in plan.groups if lesson in groups.get(code, ())))
+        for lesson in plan_lessons(plan, groups)
+    ]
+
+
+def calendar_plans(
+    plans: Iterable[Plan],
+    token_json: str,
+    collected: Collected,
+    session: requests.Session | None = None,
+) -> dict[str, list[PlanLesson]]:
+    """Plany grup z ich kalendarzy Google (dla planów z ID kalendarza) w zakresie dat semestru."""
+    session = session or requests.Session()
+    days = [lesson.day for lessons in collected.groups.values() for lesson in lessons]
+    kind_names = {
+        lesson.kind: lesson.kind_name
+        for lessons in collected.groups.values()
+        for lesson in lessons
+        if lesson.kind_name
+    }
+    token = access_token(token_json, session)
+    found = {}
+    for plan in plans:
+        if plan.calendar_id and days:
+            events = list_events(session, token, plan.calendar_id, min(days), max(days))
+            sources = {name: code for code, name in plan.groups}
+            found[plan.name] = calendar_plan(events, sources, kind_names)
+    return found
+
+
 def _key(lesson: Lesson) -> tuple:
     return (lesson.day, lesson.start, lesson.end, lesson.course, lesson.kind, lesson.teacher,
             lesson.room)  # fmt: skip
@@ -157,15 +193,40 @@ def to_data(
     semester_iid: int,
     plans: Iterable[Plan] = (),
     generated: datetime | None = None,
+    calendars: dict[str, list[PlanLesson]] | None = None,
 ) -> dict:
-    """Zwarty JSON dla strony: słowniki nazw i zajęcia jako krotki indeksów."""
+    """Zwarty JSON dla strony: słowniki nazw i zajęcia jako krotki indeksów.
+
+    Plany grup: z ich kalendarzy Google (`calendars`, nazwa planu -> zajęcia), a dla planów
+    bez kalendarza — złożone z ewig jak w gcalsync.
+    """
+    calendars = calendars or {}
     lessons = merge(collected.groups)
-    position = {_key(lesson): i for i, (lesson, _) in enumerate(lessons)}
-    teachers, t_idx = _index(lesson.teacher for lesson, _ in lessons)
-    rooms, r_idx = _index(lesson.room for lesson, _ in lessons)
-    courses, c_idx = _index(lesson.course for lesson, _ in lessons)
+    own = [
+        (plan.name, "kalendarz" if plan.name in calendars else "ewig",
+         calendars[plan.name] if plan.name in calendars else ewig_plan(plan, collected.groups))
+        for plan in plans
+    ]  # fmt: skip
+    every = [lesson for lesson, _ in lessons] + [p.lesson for _, _, items in own for p in items]
+    teachers, t_idx = _index(lesson.teacher for lesson in every)
+    rooms, r_idx = _index(lesson.room for lesson in every)
+    courses, c_idx = _index(lesson.course for lesson in every)
     groups, g_idx = _index(collected.groups)
-    kinds = {lesson.kind: lesson.kind_name for lesson, _ in lessons if lesson.kind_name}
+    kinds = {lesson.kind: lesson.kind_name for lesson in every if lesson.kind_name}
+
+    def row(lesson: Lesson, in_groups: Iterable[str]) -> list:
+        return [
+            lesson.day.isoformat(),
+            lesson.start,
+            lesson.end,
+            c_idx[lesson.course],
+            lesson.kind,
+            lesson.seq,
+            t_idx[lesson.teacher],
+            r_idx[lesson.room],
+            sorted(g_idx[g] for g in in_groups if g in g_idx),
+        ]
+
     return {
         "version": DATA_VERSION,
         "generated": (generated or datetime.now(UTC)).isoformat(timespec="seconds"),
@@ -177,27 +238,16 @@ def to_data(
         "courses": courses,
         "kinds": dict(sorted(kinds.items())),
         # [data, początek, koniec, przedmiot, forma, numer, prowadzący, sala, [grupy]]
-        "lessons": [
-            [
-                lesson.day.isoformat(),
-                lesson.start,
-                lesson.end,
-                c_idx[lesson.course],
-                lesson.kind,
-                lesson.seq,
-                t_idx[lesson.teacher],
-                r_idx[lesson.room],
-                sorted(g_idx[g] for g in in_groups),
-            ]
-            for lesson, in_groups in lessons
-        ],
-        # plany grup jak w gcalsync: nazwa i numery zajęć z listy "lessons"
+        "lessons": [row(lesson, in_groups) for lesson, in_groups in lessons],
+        # plany naszych grup: źródło („kalendarz” albo „ewig”) i zajęcia jak w "lessons"
+        # z dopiskiem o ręcznej zmianie w Kalendarzu Google
         "plans": [
             {
-                "name": plan.name,
-                "lessons": [position[_key(e)] for e in plan_lessons(plan, collected.groups)],
+                "name": name,
+                "source": source,
+                "lessons": [[*row(p.lesson, p.groups), p.note] for p in items],
             }
-            for plan in plans
+            for name, source, items in own
         ],
     }
 
@@ -215,6 +265,13 @@ def check(collected: Collected, config: Config) -> None:
         )
 
 
+def _plan_summary(plan: dict) -> str:
+    source = "Kalendarz Google" if plan["source"] == "kalendarz" else "e-Dziekanat"
+    manual = sum(1 for row in plan["lessons"] if row[-1])
+    extra = f", {manual} zmienionych/dodanych ręcznie" if manual else ""
+    return f"{plan['name']} ({source}, {len(plan['lessons'])} zajęć{extra})"
+
+
 def summary(collected: Collected, data: dict, notes: list[str]) -> str:
     """Podsumowanie uruchomienia (Markdown, do raportu GitHub Actions)."""
     lines = [
@@ -224,8 +281,7 @@ def summary(collected: Collected, data: dict, notes: list[str]) -> str:
         f"- zajęcia: {len(data['lessons'])}",
         f"- prowadzący: {sum(1 for t in data['teachers'] if t)}",
         f"- sale: {sum(1 for r in data['rooms'] if r)}",
-        "- plany grup (gcalsync): "
-        + (", ".join(f"{p['name']} ({len(p['lessons'])} zajęć)" for p in data["plans"]) or "brak"),
+        "- plany grup: " + (", ".join(_plan_summary(p) for p in data["plans"]) or "brak"),
     ]
     if collected.failed:
         lines += ["", "### Nieudane grupy", ""]

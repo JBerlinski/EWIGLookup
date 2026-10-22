@@ -35,7 +35,9 @@
   body { margin: 0; background: var(--bg); color: var(--text);
          font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
   .wrap { max-width: 1200px; margin: 0 auto; padding: 20px 16px 48px; }
-  header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px; margin-bottom: 16px; }
+  header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+  .titles { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px; min-width: 0; }
+  .theme { display: inline-flex; align-items: center; gap: 6px; flex: none; }
   h1 { font-size: 22px; margin: 0; letter-spacing: -.01em; }
   .muted { color: var(--muted); }
   .small { font-size: 13px; }
@@ -155,23 +157,68 @@
     .finder-form .wide { grid-column: 1 / -1; }
     .slots { grid-template-columns: 1fr; }
     .avail { grid-template-columns: 1fr; }
-    .ablocks { display: grid; grid-template-columns: 1fr 1fr; gap: 0 6px; }
+  }
+  html { -webkit-tap-highlight-color: transparent; }
+  .hint summary { cursor: pointer; font-weight: 600; }
+  .hint p { margin: 6px 0 0; }
+  .daytabs { display: none; }
+  @media (max-width: 820px) {
+    .wrap { padding: 14px 12px calc(40px + env(safe-area-inset-bottom)); }
+    h1 { font-size: 19px; line-height: 1.25; }
+    .titles { gap: 2px; flex-direction: column; align-items: flex-start; }
+    .theme { padding: 8px 10px; }
+    .theme-label { display: none; }
+    .controls { gap: 8px; }
+    .seg { display: flex; width: 100%; }
+    .seg button { flex: 1; padding: 9px 6px; }
+    .combo { flex-basis: 100%; max-width: none; }
+    /* 16 px — iOS nie powiększa strony przy wpisywaniu */
+    .combo input, .field select, .field input[type="date"] { font-size: 16px; }
+    .combo ul { max-height: min(60vh, 420px); }
+    .combo li { padding: 11px 10px; }
+    .btn { min-height: 40px; min-width: 40px; }
+    .weeknav h2, .weekhead h3 { flex: 1; text-align: center; margin: 0; font-size: 16px; }
+    .weeknav .spacer { display: none; }
+    .weeknav .viewbtn { flex-basis: 100%; }
+    .finder { padding: 12px; }
+    .check input { width: 18px; height: 18px; }
+    /* siatka tygodnia: jeden dzień naraz, wybierany zakładką */
+    .daytabs { display: flex; gap: 4px; margin-bottom: 8px; }
+    .daytabs button { flex: 1; font: inherit; font-size: 13px; padding: 8px 0; border-radius: 8px; cursor: pointer;
+                      border: 1px solid var(--line); background: var(--panel); color: var(--text); line-height: 1.2; }
+    .daytabs button small { display: block; color: var(--muted); font-size: 11px; }
+    .daytabs button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .daytabs button[aria-pressed="true"] small { color: inherit; }
+    .daytabs button.today:not([aria-pressed="true"]) { border-color: var(--today-line); }
+    .aday:not(.active) { display: none; }
+    .aday h3 { display: none; }
+    .ablocks { display: block; }
+    .ablock { display: grid; grid-template-columns: 92px 1fr; gap: 0 8px; min-height: 0; padding: 9px 10px; font-size: 13px; }
+    .ablock .aitem { grid-column: 2; }
+  }
+  @media (max-width: 420px) {
+    .seg .long { display: none; }
   }
 </style>
 </head>
 <body>
 <div class="wrap">
   <header>
-    <h1>Plany prowadzących i sal WIG</h1>
-    <span class="muted small" id="updated">Wczytywanie…</span>
-    <button class="btn theme small" id="theme" type="button" title="Przełącz jasny / ciemny motyw">Motyw</button>
+    <div class="titles">
+      <h1>Plany prowadzących i sal WIG</h1>
+      <span class="muted small" id="updated">Wczytywanie…</span>
+    </div>
+    <button class="btn theme small" id="theme" type="button" title="Przełącz jasny / ciemny motyw" aria-label="Przełącz jasny / ciemny motyw">
+      <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 1.5a6.5 6.5 0 0 1 0 13z" fill="currentColor"/></svg>
+      <span class="theme-label">Motyw</span>
+    </button>
   </header>
 
   <div class="controls">
     <div class="seg" role="group" aria-label="Rodzaj planu">
       <button type="button" data-mode="t" aria-pressed="true">Prowadzący</button>
       <button type="button" data-mode="r" aria-pressed="false">Sale</button>
-      <button type="button" data-mode="f" aria-pressed="false">Przełożenie zajęć</button>
+      <button type="button" data-mode="f" aria-pressed="false">Przełożenie<span class="long"> zajęć</span></button>
     </div>
     <div class="combo" id="search-box">
       <input id="search" type="search" autocomplete="off" spellcheck="false"
@@ -202,11 +249,13 @@
       <label class="check"><input id="f-weekend" type="checkbox"> proponuj też soboty i niedziele</label>
     </div>
     <div class="result" id="f-result"></div>
-    <p class="hint">Termin pasuje, gdy wolni są jednocześnie prowadzący, sala i zaznaczone grupy (plany
+    <details class="hint"><summary>Jak to działa?</summary>
+      <p>Termin pasuje, gdy wolni są jednocześnie prowadzący, sala i zaznaczone grupy (plany
       złożone jak w gcalsync: grupy w kolejności priorytetu, bez wykluczonych przedmiotów).
       Zajętość wynika z planów grup WIG w e-Dziekanacie. Nie widać tu zajęć prowadzącego na innych
       wydziałach, konsultacji ani rezerwacji sal spoza planu. Dni, w których na WIG nie ma żadnych zajęć
       (święta, przerwy), nie są proponowane.</p>
+    </details>
   </section>
   <p class="muted small stats" id="stats"></p>
 </div>
@@ -214,6 +263,7 @@
 <script>
 "use strict";
 const DAYS = ["poniedziałek", "wtorek", "środa", "czwartek", "piątek", "sobota", "niedziela"];
+const SHORT_DAYS = ["Pn", "Wt", "Śr", "Cz", "Pt", "So", "Nd"];
 const MONTHS = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"];
 const TITLE_WORDS = new Set(["dr", "mgr", "prof", "hab", "inż", "płk", "ppłk", "mjr", "kpt",
   "por", "ppor", "gen", "bryg", "kmdr", "lic", "doc", "arch", "n", "med", "wat"]);
@@ -452,6 +502,7 @@ function link(mode, key, text) {
 }
 
 function render() {
+  onSwipe = null;
   document.querySelectorAll(".seg button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.mode === state.mode)));
   const finding = state.mode === "f";
   $("search-box").hidden = finding;
@@ -478,12 +529,13 @@ function render() {
     state.week = cur < first ? first : cur > last ? last : cur;
   }
   const nav = el("div", { class: "weeknav" });
-  const viewBtn = el("button", { class: "btn", type: "button",
+  const viewBtn = el("button", { class: "btn viewbtn", type: "button",
     text: state.view === "week" ? "Lista wszystkich terminów" : "Widok tygodnia",
     onclick: () => { state.view = state.view === "week" ? "list" : "week"; writeHash(); render(); } });
   if (state.view === "week") {
     const end = addDays(state.week, 6);
     const go = (w) => { state.week = w; writeHash(); render(); };
+    onSwipe = (dir) => { const w = addDays(state.week, 7 * dir); if (w >= first && w <= last) go(w); };
     nav.append(
       el("button", { class: "btn", type: "button", title: "Poprzedni tydzień", text: "‹", onclick: () => go(addDays(state.week, -7)), ...(state.week <= first ? { disabled: "" } : {}) }),
       el("h2", { text: `${fmtDay(state.week)} – ${fmtDay(end)} ${end.getFullYear()}` }),
@@ -590,7 +642,8 @@ function defaultTerm() {
   return { day, block: block?.start ?? null };
 }
 
-const pick = (day, start) => { finder.d = day; finder.b = start; writeHash(); render(); };
+let gridDay = null;  // dzień siatki tygodnia pokazywany na telefonie (null = dzień terminu)
+const pick = (day, start) => { finder.d = day; finder.b = start; gridDay = null; writeHash(); render(); };
 
 function busyCard({ l, why }) {
   const card = lessonCard(l, "both");
@@ -603,6 +656,13 @@ function weekGrid() {
   const monday = mondayOf(parseIso(finder.d));
   const days = [...Array(finder.weekend ? 7 : 5)].map((_, i) => iso(addDays(monday, i)));
   const t = iso(today()), now = nowHm();
+  const active = days.includes(gridDay) ? gridDay : days.includes(finder.d) ? finder.d : days[0];
+  const showDay = (day) => { gridDay = day; render(); };
+  const tabs = el("div", { class: "daytabs", role: "group", "aria-label": "Dzień tygodnia" },
+    ...days.map((day) => el("button", {
+      type: "button", class: day === t ? "today" : "", "aria-pressed": String(day === active), onclick: () => showDay(day),
+    }, SHORT_DAYS[(parseIso(day).getDay() + 6) % 7], el("small", { text: fmtDay(parseIso(day)) }))));
+  onSwipe = (dir) => { const next = days[days.indexOf(active) + dir]; if (next) showDay(next); };
   const grid = el("div", { class: "avail", style: `--days:${days.length}` });
   for (const day of days) {
     const d = parseIso(day), off = !CLASS_DAYS.includes(day);
@@ -623,7 +683,7 @@ function weekGrid() {
         : el("button", { class: cls, type: "button", title: "Wybierz ten termin", onclick: () => pick(day, b.start) },
             time, el("span", { class: "aitem", text: off ? "dzień bez zajęć" : "wolne" })));
     }
-    grid.append(el("section", { class: `aday${day === t ? " today" : ""}` },
+    grid.append(el("section", { class: `aday${day === t ? " today" : ""}${day === active ? " active" : ""}` },
       el("h3", {}, el("span", { text: DAYS[(d.getDay() + 6) % 7] }), el("span", { text: fmtDay(d) })), blocks));
   }
   const shift = (n) => pick(iso(addDays(parseIso(finder.d), n)), finder.b);
@@ -631,7 +691,7 @@ function weekGrid() {
   return [el("div", { class: "weekhead" },
     el("button", { class: "btn", type: "button", title: "Poprzedni tydzień", text: "‹", onclick: () => shift(-7) }),
     el("h3", { text: `Tydzień ${fmtDay(monday)} – ${fmtDay(end)}` }),
-    el("button", { class: "btn", type: "button", title: "Następny tydzień", text: "›", onclick: () => shift(7) })), grid];
+    el("button", { class: "btn", type: "button", title: "Następny tydzień", text: "›", onclick: () => shift(7) })), tabs, grid];
 }
 
 function renderFinder() {
@@ -687,6 +747,21 @@ function renderFinder() {
   parts.push(...weekGrid());
   out.replaceChildren(...parts);
 }
+
+// --- przesunięcie palcem w bok nad siatką: poprzedni / następny (tydzień albo dzień) ---
+let onSwipe = null;  // (kierunek: -1 | 1) => void, ustawiane przez widok
+let touch = null;
+document.addEventListener("touchstart", (e) => {
+  const p = e.touches[0];
+  touch = e.touches.length === 1 && e.target.closest?.(".week, .avail, .daytabs")
+    ? { x: p.clientX, y: p.clientY, at: Date.now() } : null;
+}, { passive: true });
+document.addEventListener("touchend", (e) => {
+  if (!touch || !onSwipe) return;
+  const p = e.changedTouches[0], dx = p.clientX - touch.x, dy = p.clientY - touch.y;
+  if (Math.abs(dx) > 60 && Math.abs(dx) > 2 * Math.abs(dy) && Date.now() - touch.at < 700) onSwipe(dx < 0 ? 1 : -1);
+  touch = null;
+}, { passive: true });
 
 // --- motyw ---
 $("theme").addEventListener("click", () => {

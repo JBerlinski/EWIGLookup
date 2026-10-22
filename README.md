@@ -6,6 +6,9 @@ plan tydzień po tygodniu albo jako listę wszystkich terminów. Adres strony zm
 z wyborem (`#t=<prowadzący>`, `#r=<sala>`), więc można też wysłać link prosto do konkretnego planu.
 Kliknięcie sali w planie prowadzącego otwiera plan tej sali (i odwrotnie).
 
+Zakładki **WIG23IX2S1**, **WIG23IX1S1** (po jednej na każdy plan z gcalsync): plan naszej grupy
+złożony tak jak w gcalsync, z prowadzącym i salą przy każdych zajęciach (`#g=<plan>`).
+
 Zakładka **Przełożenie zajęć**: czy zajęcia z danym prowadzącym można przełożyć na dany termin
 do danej sali tak, żeby pasowało naszym grupom. Wybierasz prowadzącego, salę, grupy (plany
 złożone jak w gcalsync — domyślnie wszystkie), dzień i blok godzinowy. Termin pasuje, gdy wolni są

@@ -169,8 +169,9 @@
     .theme { padding: 8px 10px; }
     .theme-label { display: none; }
     .controls { gap: 8px; }
-    .seg { display: flex; width: 100%; }
-    .seg button { flex: 1; padding: 9px 6px; }
+    .seg { display: flex; flex-wrap: wrap; width: 100%; row-gap: 3px; }
+    .seg button { flex: 1 1 30%; padding: 9px 6px; }
+    .seg button.plan { flex-basis: 45%; }
     .combo { flex-basis: 100%; max-width: none; }
     /* 16 px — iOS nie powiększa strony przy wpisywaniu */
     .combo input, .field select, .field input[type="date"] { font-size: 16px; }
@@ -341,7 +342,14 @@ async function load() {
   }
   BLOCKS = blocksOf(lessons);
   CLASS_DAYS = [...new Set(lessons.map((l) => l.day))].sort();
-  PLANS = (D.plans || []).map((p) => ({ name: p.name, byDay: byDayOf(p.lessons.map((i) => lessons[i])) }));
+  PLANS = (D.plans || []).map((p) => {
+    const own = p.lessons.map((i) => lessons[i]);
+    return { name: p.name, lessons: own, byDay: byDayOf(own) };
+  });
+  document.querySelector(".seg").append(...PLANS.map((p) => el("button", {
+    type: "button", class: "plan", "data-mode": "g", "data-plan": p.name, "aria-pressed": "false",
+    title: `Plan grupy ${p.name} (jak w gcalsync)`, text: p.name,
+  })));
   $("f-groups").replaceChildren(...PLANS.map((p) => el("label", { class: "check" },
     el("input", { type: "checkbox", value: p.name, onchange: () => {
       finder.g = [...document.querySelectorAll("#f-groups input:checked")].map((c) => c.value);
@@ -389,10 +397,14 @@ function readHash() {
     finder.g = p.has("g") ? p.get("g").split(",").filter((n) => PLANS.some((x) => x.name === n)) : null;
     return;
   }
-  state.mode = p.has("r") ? "r" : "t";
+  state.mode = p.has("g") ? "g" : p.has("r") ? "r" : "t";
   state.key = p.get(state.mode) || null;
-  const map = state.mode === "t" ? byTeacher : byRoom;
-  if (state.key && !map.has(state.key)) state.key = null;
+  if (state.mode === "g") {
+    if (!PLANS.some((x) => x.name === state.key)) state.key = PLANS[0]?.name ?? null;
+  } else {
+    const map = state.mode === "t" ? byTeacher : byRoom;
+    if (state.key && !map.has(state.key)) state.key = null;
+  }
   state.view = p.get("v") === "list" ? "list" : "week";
   state.week = isIsoDay(p.get("w")) ? mondayOf(parseIso(p.get("w"))) : null;
 }
@@ -472,21 +484,24 @@ $("f-date").addEventListener("change", (e) => { finder.d = isIsoDay(e.target.val
 $("f-block").addEventListener("change", (e) => { finder.b = e.target.value; writeHash(); render(); });
 $("f-weekend").addEventListener("change", (e) => { finder.weekend = e.target.checked; writeHash(); render(); });
 
-document.querySelectorAll(".seg button").forEach((b) => b.addEventListener("click", () => {
-  const mode = b.dataset.mode;
-  if (state.mode === mode) return;
+// zakładki: prowadzący, sale, przełożenie zajęć i po jednej na plan grupy (dopisywane w load())
+document.querySelector(".seg").addEventListener("click", (e) => {
+  const b = e.target.closest("button");
+  if (!b) return;
+  const mode = b.dataset.mode, plan = b.dataset.plan || null;
+  if (state.mode === mode && (mode !== "g" || state.key === plan)) return;
   if (mode === "f") {  // wybrany prowadzący / sala przechodzi do wyszukiwarki terminu
     if (state.mode === "t" && state.key) finder.t = state.key;
     if (state.mode === "r" && state.key) finder.r = state.key;
   }
-  state.mode = mode; state.key = null; state.week = null;
+  state.mode = mode; state.key = plan; state.week = null;
   writeHash(); render();
-  if (mode !== "f") $("search").focus();
-}));
+  if (mode === "t" || mode === "r") $("search").focus();
+});
 
 // --- widoki ---
-/** show: "r" — sala (plan prowadzącego), "t" — prowadzący (plan sali), "both" — oba. */
-function lessonCard(l, show = state.mode === "t" ? "r" : "t") {
+/** show: "r" — sala (plan prowadzącego), "t" — prowadzący (plan sali), "both" — oba (plan grupy). */
+function lessonCard(l, show = { t: "r", r: "t" }[state.mode] || "both") {
   const isNow = l.day === iso(today()) && l.start <= nowHm() && nowHm() < l.end;
   const kindName = D.kinds[l.kind] || l.kind;
   const room = l.room ? link("r", l.room, `sala ${l.room}`) : "sala nieznana";
@@ -503,9 +518,10 @@ function link(mode, key, text) {
 
 function render() {
   onSwipe = null;
-  document.querySelectorAll(".seg button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.mode === state.mode)));
+  document.querySelectorAll(".seg button").forEach((b) => b.setAttribute("aria-pressed",
+    String(b.dataset.mode === state.mode && (state.mode !== "g" || b.dataset.plan === state.key))));
   const finding = state.mode === "f";
-  $("search-box").hidden = finding;
+  $("search-box").hidden = finding || state.mode === "g";
   $("finder").hidden = !finding;
   $("main").hidden = finding;
   if (finding) { renderFinder(); return; }
@@ -513,6 +529,14 @@ function render() {
   mainCombo.sync();
   if (!D) return;
   const main = $("main");
+  const all = state.mode === "g" ? PLANS.find((p) => p.name === state.key)?.lessons ?? []
+    : (state.mode === "t" ? byTeacher : byRoom).get(state.key) ?? [];
+  if (state.mode === "g" && !all.length) {
+    main.replaceChildren(el("div", { class: "empty-state" },
+      el("p", { text: state.key ? `Plan ${state.key} nie ma zajęć.` : "Brak planów grup w danych." })));
+    document.title = "Plany WIG";
+    return;
+  }
   if (!state.key) {
     const what = state.mode === "t" ? "prowadzącego" : "salę";
     main.replaceChildren(el("div", { class: "empty-state" },
@@ -522,7 +546,6 @@ function render() {
     return;
   }
   document.title = `${state.key} — Plany WIG`;
-  const all = (state.mode === "t" ? byTeacher : byRoom).get(state.key);
   const first = mondayOf(parseIso(all[0].day)), last = mondayOf(parseIso(all[all.length - 1].day));
   if (!state.week) {
     const cur = mondayOf(today());

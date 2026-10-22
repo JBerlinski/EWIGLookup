@@ -234,3 +234,13 @@ def test_maintenance_page_is_outage_not_empty_group():
     plan_requests = [q for _, path, q in fake.log if path == "/ed2/logged.php" and "exv" in q]
     assert {q["exv"][0] for q in plan_requests} == {"WIG23IX1S1"}  # dalsze grupy nie są odpytywane
     assert not fake.logged_in
+
+
+def test_monday_dates_in_table_header_row_are_read():
+    # Na stronie ewig daty poniedziałków są w wierszu <th> nagłówka tabeli, nie w td…DD….
+    monday = Lesson("Geodezja", "w", "Wykład", 2, T1, "18 58", date(2026, 10, 5), "08:00", "09:35")
+    lessons = [monday, *PLANS["WIG23IX1S1"]]
+    page = plan_page("WIG23IX1S1", lessons)
+    assert '<th class="thFormList1HSheTeaGrpHTM3"' in page
+    assert parse_plan_grid(page, 20261) == sorted(lessons, key=lambda e: (e.day, e.start))
+    assert count_cells(page) == len(lessons)

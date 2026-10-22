@@ -166,8 +166,12 @@ def _parse(page: str, semester_iid: int) -> _Parsed:
     for number, (start, end) in enumerate(_grid_tables(page), 1):
         dates: list[date | None] = []
         for index, row in enumerate(_rows(page, start, end)):
-            header = [c for c in row if "DDSheTeaGrpHTM3" in c.cls]
-            if header:
+            times = next((TIMES.search(c.html) for c in row if TIMES.search(c.html)), None)
+            # Wiersz dat: komórki *HTM3 z datami, bez godzin. Daty poniedziałków są w wierszu
+            # nagłówka tabeli (<th class="thFormList1HSheTeaGrpHTM3">), pozostałych dni
+            # w komórkach tdFormList1DDSheTeaGrpHTM3.
+            header = [c for c in row if c.cls.endswith("SheTeaGrpHTM3")]
+            if times is None and any(DATE.search(c.html) for c in header):
                 dates = []
                 for c in header:
                     d = DATE.search(c.html)
@@ -177,10 +181,9 @@ def _parse(page: str, semester_iid: int) -> _Parsed:
                     else:
                         dates.append(None)
                 continue
-            times = next((TIMES.search(c.html) for c in row if TIMES.search(c.html)), None)
             if times is None:
                 continue
-            slots = [c for c in row if c.cls.endswith("SheTeaGrpHTM3") and "DD" not in c.cls]
+            slots = [c for c in header if "DD" not in c.cls and not c.cls.startswith("th")]
             if len(slots) != len(dates):
                 classes = ", ".join(sorted({c.cls for c in row}))
                 out.notes.append(

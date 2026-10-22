@@ -77,16 +77,19 @@ def plan_grid(lessons: list[Lesson]) -> str:
     rows = []
     for weekday, name in enumerate(WEEKDAYS):
         dates = [monday + timedelta(days=7 * w + weekday) for w in range(weeks)]
+        # Jak na prawdziwej stronie: daty poniedziałków są w wierszu nagłówka tabeli (<th>,
+        # klasy thFormList1H…), pozostałych dni w komórkach tdFormList1DD….
+        tag, kind = ("th", "thFormList1H") if weekday == 0 else ("td", "tdFormList1DD")
         header = "".join(
-            '<td class="tdFormList1DDSheTeaGrpHTM3" valign="middle">'
-            f"<nobr>{d.day:02d}<br>{ROMAN_MONTHS[d.month - 1]}</nobr></td>"
+            f'<{tag} class="{kind}SheTeaGrpHTM3" valign="middle">'
+            f"<nobr>{d.day:02d}<br>{ROMAN_MONTHS[d.month - 1]}</nobr></{tag}>"
             for d in dates
         )
         rows.append(
-            f'<tr><td valign="middle" class="tdFormList1DDSheTeaGrpHTM0" rowspan="8">'
-            f"<nobr>{'<br>'.join(name)}</nobr></td>"
-            '<td class="tdFormList1DDSheTeaGrpHTM1">nr.<br>i</td>'
-            '<td class="tdFormList1DDSheTeaGrpHTM2">&nbsp;bloku<br>&nbsp;czas</td>'
+            f'<tr><{tag} valign="middle" class="{kind}SheTeaGrpHTM0" rowspan="8">'
+            f"<nobr>{'<br>'.join(name)}</nobr></{tag}>"
+            f'<{tag} class="{kind}SheTeaGrpHTM1">nr.<br>i</{tag}>'
+            f'<{tag} class="{kind}SheTeaGrpHTM2">&nbsp;bloku<br>&nbsp;czas</{tag}>'
             f"{header}</tr>"
         )
         for number, (start, end) in enumerate(SLOTS, 1):

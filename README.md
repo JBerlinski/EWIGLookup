@@ -6,11 +6,18 @@ plan tydzień po tygodniu albo jako listę wszystkich terminów. Adres strony zm
 z wyborem (`#t=<prowadzący>`, `#r=<sala>`), więc można też wysłać link prosto do konkretnego planu.
 Kliknięcie sali w planie prowadzącego otwiera plan tej sali (i odwrotnie).
 
-Zakładka **Wolny termin**: wybierasz prowadzącego i/lub salę, dzień i blok godzinowy, a strona od razu
-mówi, czy termin jest wolny. Jeśli nie, pokazuje zajęcia, które go zajmują, i dwa najbliższe wolne
-terminy (wolny prowadzący i sala jednocześnie; bez przeszłości, weekendów — chyba że zaznaczysz —
-i dni, w których na WIG nie ma żadnych zajęć, np. świąt). Bloki godzinowe są brane z planów.
-Kliknięcie propozycji ją sprawdza; link do wyniku można wysłać dalej.
+Zakładka **Przełożenie zajęć**: czy zajęcia z danym prowadzącym można przełożyć na dany termin
+do danej sali tak, żeby pasowało naszym grupom. Wybierasz prowadzącego, salę, grupy (plany
+złożone jak w gcalsync — domyślnie wszystkie), dzień i blok godzinowy. Termin pasuje, gdy wolni są
+jednocześnie prowadzący, sala i grupy; jeśli nie, strona pokazuje kolizje (kogo zajmują) i dwa
+najbliższe pasujące terminy (bez przeszłości, weekendów — chyba że zaznaczysz — i dni bez zajęć
+na WIG, np. świąt). Pod spodem siatka całego tygodnia: zajętość sali, prowadzącego i grup razem,
+wolny blok można kliknąć. Link do wyniku można wysłać dalej.
+
+Plany grup automat pobiera przy każdym uruchomieniu z `gcalsync.config.json` w repozytorium
+[gcalsync](https://github.com/JBerlinski/Gcalsync) i składa tak jak gcalsync: reguły wykluczeń,
+jeden egzemplarz duplikatu z ważniejszej grupy, odrzucenie zajęć mniej ważnej grupy kolidujących
+z ważniejszą. Plan, którego grupy nie udało się pobrać, jest pomijany.
 
 ## Skąd są dane
 
@@ -54,6 +61,7 @@ Strona ma `noindex` i `robots.txt` blokujące wyszukiwarki, ale każdy, kto ma l
 | `group_pattern` | wyrażenie regularne kodów grup z listy (odsiewa inne pola wyboru) |
 | `include` / `exclude` | grupy dopisane ręcznie / pomijane |
 | `max_failed_share` | jaki ułamek nieudanych grup jeszcze pozwala opublikować stronę |
+| `gcalsync_config` | adres albo ścieżka `gcalsync.config.json` z planami grup; `""` — bez planów |
 
 ## Lokalnie
 

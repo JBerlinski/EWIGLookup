@@ -7,6 +7,17 @@ from datetime import date, timedelta
 
 from ewiglookup.build import Collected
 from ewiglookup.grid import Lesson
+from ewiglookup.plans import Plan, Rule
+
+# plany grup jak w gcalsync.config.json (grupa kierunkowa ważniejsza od domyślnej)
+DEMO_PLANS = [
+    Plan(
+        "WIG23IX2S1",
+        (("WIG23IX2S1", "Grupa kierunkowa"), ("WIG23IX1S1", "Grupa domyślna")),
+        (Rule("course", "equals", "Statystyka"),),
+    ),
+    Plan("WIG23IX1S1", (("WIG23IX1S1", "Grupa WIG23IX1S1"),), ()),
+]
 
 SLOTS = [("08:00", "09:35"), ("09:50", "11:25"), ("11:40", "13:15"), ("13:30", "15:05"),
          ("15:45", "17:20"), ("17:35", "19:10")]  # fmt: skip

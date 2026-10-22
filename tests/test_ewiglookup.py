@@ -244,3 +244,86 @@ def test_monday_dates_in_table_header_row_are_read():
     assert '<th class="thFormList1HSheTeaGrpHTM3"' in page
     assert parse_plan_grid(page, 20261) == sorted(lessons, key=lambda e: (e.day, e.start))
     assert count_cells(page) == len(lessons)
+
+
+# --- plany grup jak w gcalsync -------------------------------------------------------------
+
+from ewiglookup.build import usable_plans  # noqa: E402
+from ewiglookup.plans import Plan, Rule, load_plans, parse_plans, plan_lessons  # noqa: E402
+
+GCALSYNC_CONFIG = {
+    "version": 2,
+    "policy": "priority",
+    "plans": [
+        {
+            "name": "WIG23IX2S1",
+            "groups": [
+                {"code": "WIG23IX2S1", "name": "Grupa kierunkowa"},
+                {"code": "WIG23IX1S1", "name": "Grupa domyślna"},
+            ],
+            "rules": [{"field": "course", "op": "equals", "value": "modelowanie  danych do BIM"}],
+        },
+        {"name": "WIG23IX1S1", "groups": [{"code": "WIG23IX1S1", "name": "Grupa"}], "rules": []},
+    ],
+}
+
+
+def _l(course, day, start, end, kind="w", seq=1, room="1 1", teacher=T1):
+    return Lesson(course, kind, "Wykład", seq, teacher, room, day, start, end)
+
+
+def test_plan_like_gcalsync_rules_duplicates_and_priority():
+    d = date(2026, 10, 5)
+    main = [
+        _l("Geodezja", d, "08:00", "09:35", seq=3, room="A"),
+        _l("Fotogrametria", d, "11:40", "13:15"),
+    ]
+    default = [
+        _l("Geodezja", d, "08:00", "09:35", seq=4, room="B"),  # duplikat (inny numer i sala)
+        _l("Bazy danych", d, "11:40", "13:15"),  # koliduje z ważniejszą grupą -> odpada
+        _l("Modelowanie danych do BIM", d, "13:30", "15:05"),  # wykluczone regułą
+        _l("Statystyka", d, "13:15", "14:00"),  # tylko styka się z niczym ważniejszym -> zostaje
+    ]
+    plan = parse_plans(GCALSYNC_CONFIG)[0]
+    got = plan_lessons(plan, {"WIG23IX2S1": main, "WIG23IX1S1": default})
+    assert [(e.course, e.room) for e in got] == [
+        ("Geodezja", "A"), ("Fotogrametria", "1 1"), ("Statystyka", "1 1"),
+    ]  # fmt: skip
+
+
+def test_rule_options_sources_dates_regex_subject():
+    d = date(2026, 10, 5)
+    lesson = _l("Geodezja wyższa", d, "08:00", "09:35", kind="L", seq=7)
+    assert Rule("subject", "contains", "(L) [7]").matches(lesson, "x")
+    assert Rule("course", "regex", "^geodezja").matches(lesson, "x")
+    assert not Rule("course", "regex", "^geodezja", case_sensitive=True).matches(lesson, "x")
+    assert not Rule("course", "contains", "geo", sources=("Grupa kierunkowa",)).matches(lesson, "x")
+    assert not Rule("course", "contains", "geo", date_from=date(2026, 11, 1)).matches(lesson, "x")
+    assert not Rule("course", "contains", "geo", enabled=False).matches(lesson, "x")
+
+
+def test_plans_in_data_point_at_lessons(tmp_path):
+    path = tmp_path / "gcalsync.config.json"
+    path.write_text(json.dumps(GCALSYNC_CONFIG), encoding="utf-8")
+    plans = load_plans(str(path))
+    collected = Collected(groups=PLANS)
+    data = to_data(collected, 20261, usable_plans(plans, collected))
+    by_name = {p["name"]: p["lessons"] for p in data["plans"]}
+    assert len(by_name["WIG23IX1S1"]) == 3
+    # wspólny wykład jest raz; laboratoria obu grup w różnych godzinach — oba zostają
+    assert len(by_name["WIG23IX2S1"]) == 4
+    assert all(0 <= i < len(data["lessons"]) for ids in by_name.values() for i in ids)
+
+
+def test_plan_with_missing_group_is_skipped():
+    collected = Collected(groups={"WIG23IX1S1": PLANS["WIG23IX1S1"]})
+    plans = usable_plans(parse_plans(GCALSYNC_CONFIG), collected)
+    assert [p.name for p in plans] == ["WIG23IX1S1"]
+    assert "WIG23IX2S1 pominięty" in collected.warnings[0]
+
+
+def test_keep_all_policy_keeps_colliding_lessons():
+    d = date(2026, 10, 5)
+    plan = Plan("P", (("A", "a"), ("B", "b")), (), keep_all=True)
+    groups = {"A": [_l("X", d, "08:00", "09:35")], "B": [_l("Y", d, "08:00", "09:35")]}
+    assert len(plan_lessons(plan, groups)) == 2

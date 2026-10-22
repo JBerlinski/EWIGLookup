@@ -18,6 +18,7 @@ from ewiglookup.ewig import (
     parse_groups,
 )
 from ewiglookup.grid import Lesson, count_cells, diagnose, parse_plan_grid
+from ewiglookup.plans import GCALSYNC_CONFIG_URL, Plan, plan_lessons
 
 PAUSE_BETWEEN_GROUPS = 2  # s — nie obciążamy ewig
 GROUP_RETRY_DELAY = 60  # s — przerwa przed ponowieniem grupy w nowej sesji
@@ -32,6 +33,8 @@ class Config:
     include: tuple[str, ...] = ()  # grupy dopisane ręcznie (gdy nie ma ich na liście)
     exclude: tuple[str, ...] = ()
     max_failed_share: float = 0.2  # więcej nieudanych grup = błąd, strona zostaje bez zmian
+    # gcalsync.config.json (adres albo ścieżka) — plany grup do wyszukiwarki terminów; "" = bez
+    gcalsync_config: str = GCALSYNC_CONFIG_URL
 
     @classmethod
     def load(cls, path: Path) -> Config:
@@ -42,6 +45,7 @@ class Config:
             include=tuple(raw.get("include", ())),
             exclude=tuple(raw.get("exclude", ())),
             max_failed_share=float(raw.get("max_failed_share", cls.max_failed_share)),
+            gcalsync_config=raw.get("gcalsync_config", cls.gcalsync_config) or "",
         )
 
 
@@ -116,8 +120,7 @@ def merge(groups: dict[str, list[Lesson]]) -> list[tuple[Lesson, list[str]]]:
     merged: dict[tuple, tuple[Lesson, list[str]]] = {}
     for group, lessons in groups.items():
         for lesson in lessons:
-            key = (lesson.day, lesson.start, lesson.end, lesson.course, lesson.kind,
-                   lesson.teacher, lesson.room)  # fmt: skip
+            key = _key(lesson)
             if key not in merged:
                 merged[key] = (lesson, [])
             if group not in merged[key][1]:
@@ -130,9 +133,34 @@ def _index(values: Iterable[str]) -> tuple[list[str], dict[str, int]]:
     return ordered, {v: i for i, v in enumerate(ordered)}
 
 
-def to_data(collected: Collected, semester_iid: int, generated: datetime | None = None) -> dict:
+def usable_plans(plans: Iterable[Plan], collected: Collected) -> list[Plan]:
+    """Plany, których wszystkie grupy pobrano (niepełny plan dawałby fałszywie wolne terminy)."""
+    usable = []
+    for plan in plans:
+        missing = [code for code, _ in plan.groups if code not in collected.groups]
+        if missing:
+            collected.warnings.append(
+                f"Plan {plan.name} pominięty — brak planu grup: {', '.join(missing)}."
+            )
+        else:
+            usable.append(plan)
+    return usable
+
+
+def _key(lesson: Lesson) -> tuple:
+    return (lesson.day, lesson.start, lesson.end, lesson.course, lesson.kind, lesson.teacher,
+            lesson.room)  # fmt: skip
+
+
+def to_data(
+    collected: Collected,
+    semester_iid: int,
+    plans: Iterable[Plan] = (),
+    generated: datetime | None = None,
+) -> dict:
     """Zwarty JSON dla strony: słowniki nazw i zajęcia jako krotki indeksów."""
     lessons = merge(collected.groups)
+    position = {_key(lesson): i for i, (lesson, _) in enumerate(lessons)}
     teachers, t_idx = _index(lesson.teacher for lesson, _ in lessons)
     rooms, r_idx = _index(lesson.room for lesson, _ in lessons)
     courses, c_idx = _index(lesson.course for lesson, _ in lessons)
@@ -163,6 +191,14 @@ def to_data(collected: Collected, semester_iid: int, generated: datetime | None 
             ]
             for lesson, in_groups in lessons
         ],
+        # plany grup jak w gcalsync: nazwa i numery zajęć z listy "lessons"
+        "plans": [
+            {
+                "name": plan.name,
+                "lessons": [position[_key(e)] for e in plan_lessons(plan, collected.groups)],
+            }
+            for plan in plans
+        ],
     }
 
 
@@ -188,6 +224,8 @@ def summary(collected: Collected, data: dict, notes: list[str]) -> str:
         f"- zajęcia: {len(data['lessons'])}",
         f"- prowadzący: {sum(1 for t in data['teachers'] if t)}",
         f"- sale: {sum(1 for r in data['rooms'] if r)}",
+        "- plany grup (gcalsync): "
+        + (", ".join(f"{p['name']} ({len(p['lessons'])} zajęć)" for p in data["plans"]) or "brak"),
     ]
     if collected.failed:
         lines += ["", "### Nieudane grupy", ""]

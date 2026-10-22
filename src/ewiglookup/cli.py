@@ -8,8 +8,9 @@ import os
 import sys
 from pathlib import Path
 
-from ewiglookup.build import Config, check, collect, summary, to_data
+from ewiglookup.build import Config, check, collect, summary, to_data, usable_plans
 from ewiglookup.ewig import EwigClient, EwigError
+from ewiglookup.plans import Plan, PlanConfigError, load_plans
 
 DEFAULT_OUT = Path("site/data.json")
 
@@ -37,7 +38,13 @@ def cmd_fetch(args: argparse.Namespace) -> int:
             with open(args.summary, "a", encoding="utf-8") as f:
                 f.write(f"## ❌ Plany nie zostały zaktualizowane\n\n{exc}\n")
         return 1
-    data = to_data(collected, config.semester_iid)
+    plans: list[Plan] = []
+    if config.gcalsync_config:
+        try:
+            plans = usable_plans(load_plans(config.gcalsync_config), collected)
+        except PlanConfigError as exc:
+            collected.warnings.append(f"{exc} Wyszukiwarka terminów będzie bez planów grup.")
+    data = to_data(collected, config.semester_iid, plans)
     _write(data, args.out)
     report = summary(collected, data, client.notes)
     print(report)
@@ -51,9 +58,9 @@ def cmd_fetch(args: argparse.Namespace) -> int:
 
 
 def cmd_demo(args: argparse.Namespace) -> int:
-    from ewiglookup.demo import demo_collected
+    from ewiglookup.demo import DEMO_PLANS, demo_collected
 
-    _write(to_data(demo_collected(), 20261), args.out)
+    _write(to_data(demo_collected(), 20261, DEMO_PLANS), args.out)
     return 0
 
 

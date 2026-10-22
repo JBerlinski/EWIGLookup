@@ -122,6 +122,28 @@
   .slot span { color: var(--muted); font-size: 13px; }
   .finder .lesson { margin-bottom: 8px; }
   .hint { color: var(--muted); font-size: 13px; margin: 12px 0 0; }
+  .checks { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 18px; margin-top: 10px; }
+  .checks .checks { margin-top: 0; }
+  .checks .check { margin-top: 0; }
+  .checks-label { font-size: 13px; color: var(--muted); font-weight: 600; }
+  .why { font-size: 12px; font-weight: 600; color: var(--bad-text); margin-top: 2px; }
+  .weekhead { display: flex; align-items: center; gap: 8px; margin: 20px 0 8px; }
+  .weekhead h3 { margin: 0 4px; }
+  .avail { display: grid; gap: 8px; grid-template-columns: repeat(var(--days, 5), minmax(0, 1fr)); }
+  .aday { min-width: 0; }
+  .aday h3 { font-size: 12px; margin: 0 0 6px; color: var(--muted); text-transform: uppercase;
+             letter-spacing: .04em; display: flex; justify-content: space-between; }
+  .aday.today h3 { color: var(--text); }
+  .ablock { display: block; width: 100%; text-align: left; font: inherit; font-size: 12px; line-height: 1.35;
+            border: 0; border-radius: 8px; padding: 6px 8px; margin: 0 0 6px; min-height: 48px; }
+  .ablock.free { background: var(--ok-bg); color: var(--ok-text); cursor: pointer; }
+  .ablock.free:hover { outline: 2px solid var(--ok-text); outline-offset: -2px; }
+  .ablock.busy { background: var(--bad-bg); color: var(--bad-text); }
+  .ablock.dim { opacity: .45; }
+  .ablock.sel { outline: 2px solid var(--accent); outline-offset: 1px; opacity: 1; }
+  .atime { font-weight: 700; font-variant-numeric: tabular-nums; }
+  .aitem { display: block; overflow-wrap: anywhere; }
+  .aitem b { font-weight: 600; }
   @media (max-width: 820px) {
     .week { grid-template-columns: 1fr; }
     .day { min-height: 0; }
@@ -132,6 +154,8 @@
     .finder-form { grid-template-columns: 1fr 1fr; }
     .finder-form .wide { grid-column: 1 / -1; }
     .slots { grid-template-columns: 1fr; }
+    .avail { grid-template-columns: 1fr; }
+    .ablocks { display: grid; grid-template-columns: 1fr 1fr; gap: 0 6px; }
   }
 </style>
 </head>
@@ -147,7 +171,7 @@
     <div class="seg" role="group" aria-label="Rodzaj planu">
       <button type="button" data-mode="t" aria-pressed="true">Prowadzący</button>
       <button type="button" data-mode="r" aria-pressed="false">Sale</button>
-      <button type="button" data-mode="f" aria-pressed="false">Wolny termin</button>
+      <button type="button" data-mode="f" aria-pressed="false">Przełożenie zajęć</button>
     </div>
     <div class="combo" id="search-box">
       <input id="search" type="search" autocomplete="off" spellcheck="false"
@@ -172,9 +196,15 @@
       <label class="field"><span>Dzień</span><input id="f-date" type="date"></label>
       <label class="field"><span>Godziny</span><select id="f-block"></select></label>
     </div>
-    <label class="check"><input id="f-weekend" type="checkbox"> proponuj też soboty i niedziele</label>
+    <div class="checks">
+      <span class="checks-label">Nasze grupy (plany z gcalsync):</span>
+      <span id="f-groups" class="checks"></span>
+      <label class="check"><input id="f-weekend" type="checkbox"> proponuj też soboty i niedziele</label>
+    </div>
     <div class="result" id="f-result"></div>
-    <p class="hint">Zajętość wynika z planów grup WIG w e-Dziekanacie. Nie widać tu zajęć prowadzącego na innych
+    <p class="hint">Termin pasuje, gdy wolni są jednocześnie prowadzący, sala i zaznaczone grupy (plany
+      złożone jak w gcalsync: grupy w kolejności priorytetu, bez wykluczonych przedmiotów).
+      Zajętość wynika z planów grup WIG w e-Dziekanacie. Nie widać tu zajęć prowadzącego na innych
       wydziałach, konsultacji ani rezerwacji sal spoza planu. Dni, w których na WIG nie ma żadnych zajęć
       (święta, przerwy), nie są proponowane.</p>
   </section>
@@ -190,7 +220,7 @@ const TITLE_WORDS = new Set(["dr", "mgr", "prof", "hab", "inż", "płk", "ppłk"
 
 const state = { mode: "t", key: null, week: null, view: "week" };
 // wyszukiwarka wolnego terminu: prowadzący, sala, dzień, początek bloku, czy proponować weekendy
-const finder = { t: null, r: null, d: null, b: null, weekend: false };
+const finder = { t: null, r: null, d: null, b: null, weekend: false, g: null };  // g: plany grup, null = wszystkie
 let D = null;          // data.json
 let lessons = [];      // rozpakowane zajęcia
 const byTeacher = new Map(), byRoom = new Map();
@@ -261,6 +291,12 @@ async function load() {
   }
   BLOCKS = blocksOf(lessons);
   CLASS_DAYS = [...new Set(lessons.map((l) => l.day))].sort();
+  PLANS = (D.plans || []).map((p) => ({ name: p.name, byDay: byDayOf(p.lessons.map((i) => lessons[i])) }));
+  $("f-groups").replaceChildren(...PLANS.map((p) => el("label", { class: "check" },
+    el("input", { type: "checkbox", value: p.name, onchange: () => {
+      finder.g = [...document.querySelectorAll("#f-groups input:checked")].map((c) => c.value);
+      writeHash(); render();
+    } }), ` ${p.name}`)));
   $("f-block").replaceChildren(...BLOCKS.map((b) => el("option", { value: b.start, text: `${b.start}–${b.end}` })));
   const gen = new Date(D.generated);
   $("updated").textContent = `Dane z e-Dziekanatu: ${gen.toLocaleString("pl-PL", { dateStyle: "medium", timeStyle: "short" })}`;
@@ -300,6 +336,7 @@ function readHash() {
     finder.d = isIsoDay(p.get("d")) ? p.get("d") : null;
     finder.b = BLOCKS.some((b) => b.start === p.get("b")) ? p.get("b") : null;
     finder.weekend = p.get("wk") === "1";
+    finder.g = p.has("g") ? p.get("g").split(",").filter((n) => PLANS.some((x) => x.name === n)) : null;
     return;
   }
   state.mode = p.has("r") ? "r" : "t";
@@ -318,6 +355,7 @@ function writeHash() {
     if (finder.d) p.set("d", finder.d);
     if (finder.b) p.set("b", finder.b);
     if (finder.weekend) p.set("wk", "1");
+    if (finder.g !== null) p.set("g", finder.g.join(","));
   } else {
     if (state.key) p.set(state.mode, state.key); else if (state.mode === "r") p.set("r", "");
     if (state.key && state.view === "list") p.set("v", "list");
@@ -493,27 +531,35 @@ function listView(all) {
   return box;
 }
 
-// --- wolny termin ---
-/** Zajęcia prowadzącego i sali w danym dniu, które nachodzą na podane godziny. */
+// --- przełożenie zajęć: czy prowadzący, sala i nasze grupy są wolni w danym terminie ---
+let PLANS = [];  // plany naszych grup jak w gcalsync: [{name, byDay: Map(dzień -> zajęcia)}]
+const selectedPlans = () => finder.g ?? PLANS.map((p) => p.name);
+
+/** Zajęcia prowadzącego, sali i wybranych grup w danym dniu nachodzące na godziny — z opisem,
+ *  kogo zajmują: [{l, why: ["prowadzący", "sala", "WIG23IX2S1", …]}]. */
 function conflicts(day, start, end) {
-  const a = toMin(start), b = toMin(end), found = [];
-  for (const [key, map] of [[finder.t, byTeacher], [finder.r, byRoom]]) {
-    if (!key) continue;
-    for (const l of dayIndex(map, key).get(day) || []) {
-      if (toMin(l.start) < b && a < toMin(l.end) && !found.includes(l)) found.push(l);
+  const a = toMin(start), b = toMin(end), found = new Map();
+  const add = (list, why) => {
+    for (const l of list || []) {
+      if (toMin(l.start) < b && a < toMin(l.end)) (found.get(l) || found.set(l, []).get(l)).push(why);
     }
-  }
-  return found.sort((x, y) => x.start.localeCompare(y.start));
+  };
+  if (finder.t) add(dayIndex(byTeacher, finder.t).get(day), "prowadzący");
+  if (finder.r) add(dayIndex(byRoom, finder.r).get(day), "sala");
+  const chosen = selectedPlans();
+  for (const p of PLANS) if (chosen.includes(p.name)) add(p.byDay.get(day), p.name);
+  return [...found].map(([l, why]) => ({ l, why })).sort((x, y) => x.l.start.localeCompare(y.l.start));
 }
 const dayIndexCache = new Map();
 function dayIndex(map, key) {
   const id = `${map === byTeacher ? "t" : "r"}:${key}`;
-  if (!dayIndexCache.has(id)) {
-    const byDay = new Map();
-    for (const l of map.get(key)) (byDay.get(l.day) || byDay.set(l.day, []).get(l.day)).push(l);
-    dayIndexCache.set(id, byDay);
-  }
+  if (!dayIndexCache.has(id)) dayIndexCache.set(id, byDayOf(map.get(key)));
   return dayIndexCache.get(id);
+}
+function byDayOf(list) {
+  const byDay = new Map();
+  for (const l of list) (byDay.get(l.day) || byDay.set(l.day, []).get(l.day)).push(l);
+  return byDay;
 }
 
 /** Dwa najbliższe (w czasie, w obie strony) wolne bloki — bez przeszłości, dni bez zajęć na WIG
@@ -544,10 +590,55 @@ function defaultTerm() {
   return { day, block: block?.start ?? null };
 }
 
+const pick = (day, start) => { finder.d = day; finder.b = start; writeHash(); render(); };
+
+function busyCard({ l, why }) {
+  const card = lessonCard(l, "both");
+  card.append(el("div", { class: "why", text: `zajmuje: ${why.join(", ")}` }));
+  return card;
+}
+
+/** Tydzień terminu jako siatka bloków: zajęte (czyje zajęcia) i wolne (kliknięcie wybiera). */
+function weekGrid() {
+  const monday = mondayOf(parseIso(finder.d));
+  const days = [...Array(finder.weekend ? 7 : 5)].map((_, i) => iso(addDays(monday, i)));
+  const t = iso(today()), now = nowHm();
+  const grid = el("div", { class: "avail", style: `--days:${days.length}` });
+  for (const day of days) {
+    const d = parseIso(day), off = !CLASS_DAYS.includes(day);
+    const blocks = el("div", { class: "ablocks" });
+    for (const b of BLOCKS) {
+      const busy = conflicts(day, b.start, b.end);
+      const past = day < t || (day === t && b.start <= now);
+      const cls = `ablock ${busy.length ? "busy" : "free"}${past || off ? " dim" : ""}${day === finder.d && b.start === finder.b ? " sel" : ""}`;
+      const time = el("div", { class: "atime", text: `${b.start}–${b.end}` });
+      if (!busy.length && past) {  // wolny, ale już minął — bez wyboru
+        blocks.append(el("div", { class: cls }, time, el("span", { class: "aitem", text: "minął" })));
+        continue;
+      }
+      blocks.append(busy.length
+        ? el("div", { class: cls }, time, ...busy.map(({ l, why }) => el("div", {
+            class: "aitem", title: `${l.course} — ${l.teacher || "?"} · sala ${l.room || "?"} · ${l.groups.join(", ")}`,
+          }, el("b", { text: `${l.course} (${l.kind})` }), ` · ${why.join(", ")}`)))
+        : el("button", { class: cls, type: "button", title: "Wybierz ten termin", onclick: () => pick(day, b.start) },
+            time, el("span", { class: "aitem", text: off ? "dzień bez zajęć" : "wolne" })));
+    }
+    grid.append(el("section", { class: `aday${day === t ? " today" : ""}` },
+      el("h3", {}, el("span", { text: DAYS[(d.getDay() + 6) % 7] }), el("span", { text: fmtDay(d) })), blocks));
+  }
+  const shift = (n) => pick(iso(addDays(parseIso(finder.d), n)), finder.b);
+  const end = addDays(monday, days.length - 1);
+  return [el("div", { class: "weekhead" },
+    el("button", { class: "btn", type: "button", title: "Poprzedni tydzień", text: "‹", onclick: () => shift(-7) }),
+    el("h3", { text: `Tydzień ${fmtDay(monday)} – ${fmtDay(end)}` }),
+    el("button", { class: "btn", type: "button", title: "Następny tydzień", text: "›", onclick: () => shift(7) })), grid];
+}
+
 function renderFinder() {
   teacherCombo.sync(); roomCombo.sync();
   $("f-weekend").checked = finder.weekend;
-  document.title = "Wolny termin — Plany WIG";
+  document.querySelectorAll("#f-groups input").forEach((c) => { c.checked = selectedPlans().includes(c.value); });
+  document.title = "Przełożenie zajęć — Plany WIG";
   if (!D) return;
   if (!finder.d || !finder.b) {
     const def = defaultTerm();
@@ -560,13 +651,15 @@ function renderFinder() {
   $("f-block").value = finder.b;
   const out = $("f-result");
   const block = BLOCKS.find((b) => b.start === finder.b);
-  if (!finder.t && !finder.r) {
+  const groups = selectedPlans();
+  if (!finder.t && !finder.r && !groups.length) {
     out.replaceChildren(el("div", { class: "empty-state" },
-      el("p", { text: "Wybierz prowadzącego, salę albo oba, a potem dzień i godziny." })));
+      el("p", { text: "Wybierz prowadzącego, salę i/lub grupy, a potem dzień i godziny." })));
     return;
   }
   if (!block) { out.replaceChildren(); return; }
-  const who = [finder.t, finder.r && `sala ${finder.r}`].filter(Boolean).join(" i ");
+  const who = [finder.t, finder.r && `sala ${finder.r}`, groups.length && `${groups.length > 1 ? "grupy" : "grupa"} ${groups.join(", ")}`]
+    .filter(Boolean).join(" · ");
   const busy = conflicts(finder.d, block.start, block.end);
   const term = `${fmtLong(finder.d)}, ${block.start}–${block.end}`;
   const parts = [];
@@ -578,18 +671,20 @@ function renderFinder() {
   }
   if (finder.d < iso(today())) parts.push(el("div", { class: "notice", text: "Ten termin już minął." }));
   if (!busy.length) {
-    parts.push(el("div", { class: "status ok" }, `✓ Termin wolny — ${who}`, el("span", { class: "sub", text: term })));
+    parts.push(el("div", { class: "status ok" }, "✓ Termin pasuje — wszyscy wolni",
+      el("span", { class: "sub", text: `${term} · ${who}` })));
   } else {
-    parts.push(el("div", { class: "status bad" }, `✗ Termin zajęty — ${who}`, el("span", { class: "sub", text: term })));
-    parts.push(el("h3", { text: "Zajęte przez" }), ...busy.map((l) => lessonCard(l, "both")));
+    parts.push(el("div", { class: "status bad" }, "✗ Termin nie pasuje",
+      el("span", { class: "sub", text: `${term} · ${who}` })));
+    parts.push(el("h3", { text: "Kolizje" }), ...busy.map(busyCard));
     const free = nearestFree(finder.d, block);
-    parts.push(el("h3", { text: "Najbliższe wolne terminy" }));
+    parts.push(el("h3", { text: "Najbliższe pasujące terminy" }));
     parts.push(free.length ? el("div", { class: "slots" }, ...free.map((f) => el("button", {
-      class: "slot", type: "button", title: "Sprawdź ten termin",
-      onclick: () => { finder.d = f.day; finder.b = f.block.start; writeHash(); render(); },
+      class: "slot", type: "button", title: "Sprawdź ten termin", onclick: () => pick(f.day, f.block.start),
     }, el("b", { text: `${f.block.start}–${f.block.end}` }), el("span", { text: fmtLong(f.day) }))))
-      : el("div", { class: "none", text: "Brak wolnych terminów do końca semestru." }));
+      : el("div", { class: "none", text: "Brak pasujących terminów do końca semestru." }));
   }
+  parts.push(...weekGrid());
   out.replaceChildren(...parts);
 }
 

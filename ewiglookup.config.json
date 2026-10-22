@@ -3,5 +3,6 @@
   "group_pattern": "[A-Z]{2,4}\\d{2}[A-Z0-9]+",
   "include": [],
   "exclude": [],
-  "max_failed_share": 0.2
+  "max_failed_share": 0.2,
+  "gcalsync_config": "https://raw.githubusercontent.com/JBerlinski/Gcalsync/main/gcalsync.config.json"
 }

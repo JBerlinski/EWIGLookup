@@ -48,7 +48,8 @@ Konsekwencja: plan prowadzącego/sali zawiera tylko zajęcia **grup widocznych n
 
 ## Automatyzacja (GitHub Actions + GitHub Pages)
 
-`.github/workflows/pages.yml` około 5:00 i 17:00 (oraz ręcznie: Actions → „Aktualizacja planów”
+`.github/workflows/pages.yml` co 4 godziny, 6 razy na dobę (GitHub bywa spóźniony o kilka godzin;
+ręcznie: Actions → „Aktualizacja planów”
 → „Run workflow”) pobiera plany, zapisuje `site/data.json` i publikuje katalog `site/` na GitHub
 Pages. Dane nie są commitowane do repozytorium — istnieją tylko w opublikowanej stronie.
 

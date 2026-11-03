@@ -2,9 +2,10 @@ name: Aktualizacja planów
 
 on:
   schedule:
-    # Około 5:00 i 17:00 czasu polskiego (cron w UTC; Polska ma +1 zimą i +2 latem).
-    # GitHub bywa spóźniony o kilka godzin — to nie przeszkadza.
-    - cron: "17 3,15 * * *"
+    # Co 4 godziny, 6 razy na dobę (cron w UTC: 0:17, 4:17, …, 20:17; w Polsce +1 zimą, +2 latem).
+    # GitHub uruchamia zadania z harmonogramu z opóźnieniem (bywa 4–8 h), dlatego częściej
+    # niż 2 razy dziennie — wtedy dane są świeże mimo opóźnień.
+    - cron: "17 */4 * * *"
   workflow_dispatch:
   push:
     branches: [main]

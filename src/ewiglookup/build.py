@@ -32,7 +32,7 @@ DATA_VERSION = 1
 @dataclass(frozen=True)
 class Config:
     semester_iid: int
-    group_pattern: str = r"[A-Z]{2,4}\d{2}[A-Z0-9]+"
+    group_pattern: str = r"[A-Z]{2,4}\d{2}[A-Za-z0-9]+"  # także małe litery, np. WIG26GRp1S6
     include: tuple[str, ...] = ()  # grupy dopisane ręcznie (gdy nie ma ich na liście)
     exclude: tuple[str, ...] = ()
     max_failed_share: float = 0.2  # więcej nieudanych grup = błąd, strona zostaje bez zmian

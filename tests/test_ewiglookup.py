@@ -79,8 +79,11 @@ def test_parse_groups_skips_other_selects_and_duplicates():
         "<select name=Data1><option value=WIG23IX1S1>a<option value='WIG24GX2S1'>b"
         '<option value="WIG23IX1S1">c<option value="">--</select>'
         "<a href=\"javascript:showGroupPlan('WIG25IX1N1')\">x</a>"
+        '<option value="WIG26GRp1S6">kod z małą literą</option>'
     )
-    assert parse_groups(page, CONFIG.group_pattern) == ["WIG23IX1S1", "WIG24GX2S1", "WIG25IX1N1"]
+    assert parse_groups(page, CONFIG.group_pattern) == [
+        "WIG23IX1S1", "WIG24GX2S1", "WIG26GRp1S6", "WIG25IX1N1",
+    ]  # fmt: skip
 
 
 def test_parse_cell_reads_teacher_room_and_kind():

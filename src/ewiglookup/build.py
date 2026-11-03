@@ -20,7 +20,7 @@ from ewiglookup.ewig import (
     parse_groups,
 )
 from ewiglookup.gcal import PlanLesson, access_token, calendar_plan, list_events
-from ewiglookup.grid import Lesson, count_cells, diagnose, parse_plan_grid
+from ewiglookup.grid import Lesson, count_cells, diagnose, parse_plan_grid, rooms_of
 from ewiglookup.plans import GCALSYNC_CONFIG_URL, Plan, plan_lessons
 
 PAUSE_BETWEEN_GROUPS = 2  # s — nie obciążamy ewig
@@ -280,7 +280,7 @@ def summary(collected: Collected, data: dict, notes: list[str]) -> str:
         f"- grupy: {len(collected.groups)} pobrane, {len(collected.failed)} nieudane",
         f"- zajęcia: {len(data['lessons'])}",
         f"- prowadzący: {sum(1 for t in data['teachers'] if t)}",
-        f"- sale: {sum(1 for r in data['rooms'] if r)}",
+        f"- sale: {len({r for room in data['rooms'] for r in rooms_of(room)})}",
         "- plany grup: " + (", ".join(_plan_summary(p) for p in data["plans"]) or "brak"),
     ]
     if collected.failed:

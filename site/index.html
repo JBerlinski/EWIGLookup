@@ -281,6 +281,8 @@ let BLOCKS = [];       // bloki godzinowe z planów: [{start, end}]
 let CLASS_DAYS = [];   // dni, w których na WIG są jakiekolwiek zajęcia (posortowane)
 
 const $ = (id) => document.getElementById(id);
+/** Sale zajęć: kilka sal naraz jest zapisanych jako „17 58, 18 58”. */
+const roomsOf = (room) => (room || "").split(", ").map((r) => r.trim()).filter(Boolean);
 const el = (tag, attrs = {}, ...kids) => {
   const n = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs)) {
@@ -336,12 +338,13 @@ async function load() {
   }
   const unpack = ([day, start, end, c, kind, seq, t, r, g, note]) => ({
     day, start, end, course: D.courses[c], kind, seq,
-    teacher: D.teachers[t], room: D.rooms[r], groups: g.map((i) => D.groups[i]), note: note || "",
+    teacher: D.teachers[t], room: D.rooms[r], rooms: roomsOf(D.rooms[r]), groups: g.map((i) => D.groups[i]),
+    note: note || "",
   });
   lessons = D.lessons.map(unpack);
   for (const l of lessons) {
     if (l.teacher) (byTeacher.get(l.teacher) || byTeacher.set(l.teacher, []).get(l.teacher)).push(l);
-    if (l.room) (byRoom.get(l.room) || byRoom.set(l.room, []).get(l.room)).push(l);
+    for (const r of l.rooms) (byRoom.get(r) || byRoom.set(r, []).get(r)).push(l);  // kilka sal naraz: w planie każdej
   }
   BLOCKS = blocksOf(lessons);
   CLASS_DAYS = [...new Set(lessons.map((l) => l.day))].sort();
@@ -509,9 +512,10 @@ document.querySelector(".seg").addEventListener("click", (e) => {
 function lessonCard(l, show = { t: "r", r: "t" }[state.mode] || "both") {
   const isNow = l.day === iso(today()) && l.start <= nowHm() && nowHm() < l.end;
   const kindName = D.kinds[l.kind] || l.kind;
-  const room = l.room ? link("r", l.room, `sala ${l.room}`) : "sala nieznana";
+  const room = !l.rooms.length ? ["sala nieznana"] : l.rooms.length === 1 ? [link("r", l.rooms[0], `sala ${l.rooms[0]}`)]
+    : ["sale ", ...l.rooms.flatMap((r, i) => [i ? ", " : null, link("r", r, r)])];
   const teacher = l.teacher ? link("t", l.teacher, l.teacher) : "prowadzący nieznany";
-  const meta = show === "both" ? [teacher, " · ", room] : [show === "r" ? room : teacher];
+  const meta = show === "both" ? [teacher, " · ", ...room] : show === "r" ? room : [teacher];
   return el("div", { class: `lesson ${kindClass(l.kind)}${isNow ? " now" : ""}` },
     el("div", { class: "time", text: `${l.start}–${l.end}` }),
     el("div", { class: "course" }, l.course, el("span", { class: "badge", title: kindName, text: l.kind })),

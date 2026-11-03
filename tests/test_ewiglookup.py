@@ -18,7 +18,14 @@ from ewiglookup.ewig import (
     menu_url,
     parse_groups,
 )
-from ewiglookup.grid import Lesson, count_cells, diagnose, parse_cell, parse_plan_grid
+from ewiglookup.grid import (
+    Lesson,
+    count_cells,
+    diagnose,
+    parse_cell,
+    parse_plan_grid,
+    rooms_of,
+)
 from tests.fake_ewig import FakeEwig, plan_page
 
 T1 = "dr inż. Jan Testowy"
@@ -90,11 +97,28 @@ def test_parse_cell_without_teacher():
     assert parse_cell(cell) == ("Wychowanie fizyczne", "ć", "Ćwiczenia", 3, "", "Hala")
 
 
+def test_parse_cell_with_several_rooms():
+    # zajęcia w dwóch salach naraz: każda sala w osobnym wierszu komórki
+    cell = (
+        '<table title="Kartografia ogólna - dr X (Projekt)"><tr><td><nobr>KaO<br>(<b>P</b>)'
+        "<br>17 58<br>18 58</nobr></td></tr><tr><td><nobr>[9]</nobr></td></tr></table>"
+    )
+    assert parse_cell(cell) == ("Kartografia ogólna", "P", "Projekt", 9, "dr X", "17 58, 18 58")
+    assert rooms_of("17 58, 18 58") == ["17 58", "18 58"]
+
+
 def test_grid_round_trip_with_year_change():
     page = plan_page("WIG23IX1S1", PLANS["WIG23IX1S1"])
     lessons = parse_plan_grid(page, 20261)
     assert lessons == sorted(PLANS["WIG23IX1S1"], key=lambda e: (e.day, e.start))
     assert count_cells(page) == len(lessons)
+
+
+def test_grid_round_trip_with_several_rooms():
+    two = Lesson("Kartografia", "P", "Projekt", 9, T1, "17 58, 18 58", date(2026, 12, 16),
+                 "11:40", "13:15")  # fmt: skip
+    page = plan_page("WIG25GW1S0", [two])
+    assert parse_plan_grid(page, 20261) == [two]
 
 
 # --- pobieranie -----------------------------------------------------------------------------

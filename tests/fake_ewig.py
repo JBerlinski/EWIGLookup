@@ -14,7 +14,7 @@ from urllib.parse import parse_qs, urlparse
 import requests
 from requests.adapters import BaseAdapter
 
-from ewiglookup.grid import Lesson
+from ewiglookup.grid import Lesson, rooms_of
 
 SID = "0123456789abcdef0123456789abcdef"
 
@@ -48,7 +48,7 @@ def plan_cell(lesson: Lesson) -> str:
         f'<table border="0" align="center" cellspacing="0" cellpadding="0" title="{title}">'
         f'<tbody><tr border="0"><td class="tdFormList1DSheTeaGrpHTM4" title="{title}"><nobr>'
         f'<b style="font-size:7.0pt;">ABC</b><br>(<b style="font-size:7.0pt;">{lesson.kind}</b>)'
-        f"<br>{escape(lesson.room)}</nobr></td></tr>"
+        f"<br>{'<br>'.join(escape(r) for r in rooms_of(lesson.room))}</nobr></td></tr>"
         f'<tr border="0"><td class="tdFormList1DSheTeaGrpHTM4" title="{title}"><nobr>'
         f'<a class="GlubN" title="{title}" href="javascript:cpg(&#39;n&#39;, &#39;1&#39;);">TeT'
         f"</a></nobr></td></tr>"

@@ -22,7 +22,9 @@ TAG = re.compile(r"<(/?)([a-zA-Z]+)\b([^>]*)>")
 CLASS_ATTR = re.compile(r"""\bclass\s*=\s*(["']?)([^"'\s>]+)\1""", re.I)
 TITLE_ATTR = re.compile(r"""\btitle\s*=\s*(["'])(.*?)\1""", re.I | re.S)
 KIND = re.compile(r"\(\s*<b\b[^>]*>\s*([^<]+?)\s*</b\s*>\s*\)", re.I)
-ROOM = re.compile(r"\(\s*<b\b[^>]*>[^<]*</b\s*>\s*\)\s*<br\s*/?>\s*([^<]*?)\s*</nobr", re.I)
+# sala (albo kilka sal, każda w osobnym wierszu „<br>”) po skrócie formy, do końca <nobr>
+ROOM = re.compile(r"\(\s*<b\b[^>]*>[^<]*</b\s*>\s*\)\s*<br\s*/?>(.*?)</nobr", re.I | re.S)
+ROOM_SEP = ", "  # separator sal zajęć odbywających się w kilku salach naraz
 SEQ = re.compile(r"<nobr\b[^>]*>\s*\[(\d+)\]\s*</nobr\s*>", re.I)
 DATE = re.compile(r"(\d{1,2})\s*<br\s*/?>\s*([IVX]+)", re.I)
 TIMES = re.compile(r"(\d{1,2}:\d{2})\s*<br\s*/?>\s*(\d{1,2}:\d{2})", re.I)
@@ -37,7 +39,7 @@ class Lesson:
     kind_name: str  # pełna nazwa z tytułu, np. Wykład
     seq: int
     teacher: str
-    room: str
+    room: str  # kilka sal naraz: rozdzielone ROOM_SEP (np. „17 58, 18 58”)
     day: date
     start: str  # GG:MM
     end: str
@@ -146,8 +148,19 @@ def parse_cell(cell_html: str) -> tuple[str, str, str, int, str, str] | None:
         kind_name.rstrip(")").strip(),
         int(seq.group(1)),
         teacher.strip(),
-        _text(room.group(1)) if room else "",
+        _rooms(room.group(1)) if room else "",
     )
+
+
+def _rooms(value: str) -> str:
+    """Sale z komórki: każda w osobnym wierszu („17 58<br>18 58”) → „17 58, 18 58”."""
+    names = (_text(part) for part in TAG.split(value)[::4])  # TAG ma 3 grupy: tekst co 4.
+    return ROOM_SEP.join(dict.fromkeys(name for name in names if name))
+
+
+def rooms_of(room: str) -> list[str]:
+    """Pojedyncze sale z pola `Lesson.room`."""
+    return [r for r in (part.strip() for part in room.split(ROOM_SEP)) if r]
 
 
 INNER_TABLE = re.compile(r"<table\b.*?</table\s*>", re.S | re.I)
